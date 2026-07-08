@@ -106,9 +106,14 @@ jobs:
         run: composer install --no-interaction --prefer-dist
 
       - name: Run Pest with coverage
+        # Pest 4 emits a WARN ("No filter is configured, code coverage will
+        # not be processed") and exits 1 if you don't pass a coverage
+        # filter. `--coverage-filter=src` scopes pcov to the plugin's
+        # production code; `tests/` is excluded by default.
+        #
         # Clover XML is consumed by SonarCloud via sonar.php.coverage.reportPaths;
         # JUnit XML is consumed via sonar.php.tests.reportPath.
-        run: ./vendor/bin/pest --coverage-clover=coverage.xml --log-junit=build/logs/junit.xml
+        run: ./vendor/bin/pest --coverage-clover=coverage.xml --log-junit=build/logs/junit.xml --coverage-filter=src
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
