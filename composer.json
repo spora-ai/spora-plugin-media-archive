@@ -1,0 +1,47 @@
+{
+    "name": "spora-ai/spora-plugin-media-archive",
+    "description": "Admin UI for browsing, filtering, and downloading media archived by Spora agents.",
+    "type": "spora-plugin",
+    "license": "MIT",
+    "require": {
+        "php": "^8.4.1",
+        "spora-ai/spora-core": ">=0.7.0 <1.0.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.94",
+        "mockery/mockery": "^1.6",
+        "pestphp/pest": "^4.0",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-mockery": "^2.0"
+    },
+    "suggest": {
+        "spora-ai/spora-plugin-minimax": "Image, speech, music, and video generation — rows produced by these tools show up here.",
+        "spora-ai/spora-plugin-email": "Email send/receive with attachment handling — outbound attachments surface as archived documents."
+    },
+    "autoload": {
+        "psr-4": {
+            "Spora\\Plugins\\MediaArchive\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Spora\\Plugins\\MediaArchive\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "analyse": "phpstan analyse --no-progress --memory-limit=512M",
+        "lint": "php-cs-fixer fix --dry-run --diff --no-interaction",
+        "format": "php-cs-fixer fix --no-interaction"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "spora-ai/installer": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

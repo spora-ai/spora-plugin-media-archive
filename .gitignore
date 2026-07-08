@@ -1,0 +1,12 @@
+/vendor/
+/.phpunit.cache/
+/.phpunit.result.cache/
+/.php-cs-fixer.cache
+/coverage/
+/storage/
+/.idea/
+/.vscode/
+/.claude/
+*.swp
+.DS_Store
+/.worktrees/
