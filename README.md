@@ -13,7 +13,7 @@ composer require spora-ai/spora-plugin-media-archive-frontend
 
 Both packages are required: the PHP package contributes the admin-panel metadata (`MediaArchiveApp` → `VueAppInterface`), and the frontend package ships the Vue IIFE bundle that the host SPA lazy-loads at runtime.
 
-Requires `spora-ai/spora-core` ≥ 0.7.0 (the version that ships `MediaArchiveService`).
+Requires `spora-ai/spora-core` ≥ 0.11.1 (ships the standalone `MediaAssetSerializer` that emits the asset `filename` on the wire — versions prior to 0.11.1 render `unknown` on the admin panel because the controller's inline `serialize()` omits the field).
 
 ## What it does
 
