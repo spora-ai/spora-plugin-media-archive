@@ -2568,16 +2568,16 @@
         },
         {
             "name": "spora-ai/spora-plugin-media-archive-frontend",
-            "version": "v0.1.6",
+            "version": "v0.1.7",
             "source": {
                 "type": "git",
                 "url": "https://github.com/spora-ai/spora-plugin-media-archive-frontend.git",
-                "reference": "4f2477dab5fa6f5c920dffc8decad535d676defc"
+                "reference": "0ba3e840e3a2e6b262495e4d4889b9015c0bc2cc"
             },
             "dist": {
                 "type": "tar",
-                "url": "https://github.com/spora-ai/spora-plugin-media-archive-frontend/releases/download/v0.1.6/spora-plugin-media-archive-frontend-v0.1.6.tar.gz",
-                "reference": "4f2477dab5fa6f5c920dffc8decad535d676defc"
+                "url": "https://github.com/spora-ai/spora-plugin-media-archive-frontend/releases/download/v0.1.7/spora-plugin-media-archive-frontend-v0.1.7.tar.gz",
+                "reference": "0ba3e840e3a2e6b262495e4d4889b9015c0bc2cc"
             },
             "require": {
                 "php": "^8.4.1"
@@ -2591,12 +2591,12 @@
             "license": [
                 "MIT"
             ],
-            "description": "Pre-built Vue SPA for browsing, filtering, and downloading Spora media-archive rows. Delivered as type `spora-plugin-frontend`; the host SPA lazy-loads it via /plugins/spora-plugin-media-archive-frontend/main.js.",
+            "description": "Pre-built Vue SPA for browsing, filtering, and downloading Spora media-archive rows. Delivered as type `spora-plugin-frontend`; the host SPA lazy-loads it via /plugins/<parent-slug>/main.js (the parent plugin's `plugin.json#slug`, not this package's name).",
             "support": {
                 "issues": "https://github.com/spora-ai/spora-plugin-media-archive-frontend/issues",
-                "source": "https://github.com/spora-ai/spora-plugin-media-archive-frontend/tree/v0.1.6"
+                "source": "https://github.com/spora-ai/spora-plugin-media-archive-frontend/tree/v0.1.7"
             },
-            "time": "2026-07-29T19:32:47+00:00"
+            "time": "2026-08-02T10:45:22+00:00"
         },
         {
             "name": "symfony/clock",
