@@ -19,6 +19,7 @@ Requires `spora-ai/spora-core` ≥ 0.11.1 (ships the standalone `MediaAssetSeria
 
 - Surfaces rows from the `media_assets` table (indexed by `MediaArchiveService`) as a filterable grid in the admin UI.
 - Filters by media type, plugin, tool, agent, and date range.
+- Scope chip row (mirrors the dashboard's ALL / My Media / Group pattern) so a user with multiple groups can isolate each group's media. The chip row reads `/principals/me` + `/groups` to populate the labels; the controller intersects `?principal_id=` with the caller's `visiblePrincipalIds()` so an out-of-scope principal id is silently dropped.
 - Click-through detail drawer with metadata (dimensions, duration, mime type, source URL).
 - One-click download via the existing `AssetController::show()` route.
 
