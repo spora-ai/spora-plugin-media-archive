@@ -37,6 +37,9 @@ final class MediaArchiveAdminController
 {
     use JsonControllerHelpers;
 
+    private const MSG_NOT_FOUND  = 'Media asset not found.';
+    private const MSG_FORBIDDEN  = 'You do not own this media asset.';
+
     public function __construct(
         private readonly MediaArchiveService $mediaArchive,
         private readonly AuthService $auth,
@@ -48,7 +51,7 @@ final class MediaArchiveAdminController
     {
         $asset = $this->mediaArchive->find($id);
         if ($asset === null) {
-            return $this->notFound('NOT_FOUND', 'Media asset not found.');
+            return $this->notFound('NOT_FOUND', self::MSG_NOT_FOUND);
         }
 
         return new JsonResponse(['data' => $this->serializer->serialize($asset)]);
@@ -97,10 +100,10 @@ final class MediaArchiveAdminController
     {
         $asset = $this->mediaArchive->find($id);
         if ($asset === null) {
-            return $this->notFound('NOT_FOUND', 'Media asset not found.');
+            return $this->notFound('NOT_FOUND', self::MSG_NOT_FOUND);
         }
         if (!$this->canEdit($asset)) {
-            return $this->forbidden('FORBIDDEN', 'You do not own this media asset.');
+            return $this->forbidden('FORBIDDEN', self::MSG_FORBIDDEN);
         }
         $asset->public_access_token = MediaArchiveService::mintPublicAccessToken();
         $asset->save();
@@ -111,10 +114,10 @@ final class MediaArchiveAdminController
     {
         $asset = $this->mediaArchive->find($id);
         if ($asset === null) {
-            return $this->notFound('NOT_FOUND', 'Media asset not found.');
+            return $this->notFound('NOT_FOUND', self::MSG_NOT_FOUND);
         }
         if (!$this->canEdit($asset)) {
-            return $this->forbidden('FORBIDDEN', 'You do not own this media asset.');
+            return $this->forbidden('FORBIDDEN', self::MSG_FORBIDDEN);
         }
 
         return $asset;

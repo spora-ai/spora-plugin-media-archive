@@ -36,6 +36,8 @@ use Spora\Plugins\MediaArchive\Http\MediaArchiveAdminController;
  */
 final class MediaArchivePlugin extends AbstractPlugin
 {
+    private const ROUTE_MEDIA_ITEM = '/api/v1/media/{id}';
+
     public function getName(): string
     {
         return 'Media Archive';
@@ -73,9 +75,9 @@ final class MediaArchivePlugin extends AbstractPlugin
     {
         $auth = [AuthMiddleware::class, CsrfMiddleware::class];
 
-        $r->addRoute('GET', '/api/v1/media/{id}', [MediaArchiveAdminController::class, 'show'], $auth);
-        $r->addRoute('PATCH', '/api/v1/media/{id}', [MediaArchiveAdminController::class, 'update'], $auth);
-        $r->addRoute('DELETE', '/api/v1/media/{id}', [MediaArchiveAdminController::class, 'destroy'], $auth);
-        $r->addRoute('POST', '/api/v1/media/{id}/public-token/refresh', [MediaArchiveAdminController::class, 'refreshPublicToken'], $auth);
+        $r->addRoute('GET', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'show'], $auth);
+        $r->addRoute('PATCH', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'update'], $auth);
+        $r->addRoute('DELETE', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'destroy'], $auth);
+        $r->addRoute('POST', self::ROUTE_MEDIA_ITEM . '/public-token/refresh', [MediaArchiveAdminController::class, 'refreshPublicToken'], $auth);
     }
 }
