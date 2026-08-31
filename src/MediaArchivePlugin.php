@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Spora\Plugins\MediaArchive;
 
 use Spora\Apps\AppInterface;
+use Spora\Core\MiddlewareRouteCollector;
+use Spora\Http\Middleware\AuthMiddleware;
+use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
+use Spora\Plugins\MediaArchive\Http\MediaArchiveAdminController;
 
 /**
  * Plugin entry point — extending {@see AbstractPlugin} (rather than directly
@@ -49,5 +53,29 @@ final class MediaArchivePlugin extends AbstractPlugin
         return [
             MediaArchiveApp::class,
         ];
+    }
+
+    /**
+     * Register the four plugin-owned admin routes
+     * (`GET`/`PATCH`/`DELETE` `/api/v1/media/{id}` and
+     * `POST /api/v1/media/{id}/public-token/refresh`) behind Auth + CSRF.
+     *
+     * These used to live in spora-core's `MediaArchiveController`; spora-core
+     * PR #221 trimmed that controller to `index()` only and the four
+     * mutating endpoints moved here so the plugin owns its CRUD end-to-end,
+     * mirroring the `spora-plugin-memories` pattern. The list endpoint
+     * stays in core because the composer and upload UI also call it.
+     *
+     * Invoked per request after the project's App routes are registered
+     * (see {@see \Spora\Plugins\PluginLoader::registerRoutes()}).
+     */
+    public function routes(MiddlewareRouteCollector $r): void
+    {
+        $auth = [AuthMiddleware::class, CsrfMiddleware::class];
+
+        $r->addRoute('GET', '/api/v1/media/{id}', [MediaArchiveAdminController::class, 'show'], $auth);
+        $r->addRoute('PATCH', '/api/v1/media/{id}', [MediaArchiveAdminController::class, 'update'], $auth);
+        $r->addRoute('DELETE', '/api/v1/media/{id}', [MediaArchiveAdminController::class, 'destroy'], $auth);
+        $r->addRoute('POST', '/api/v1/media/{id}/public-token/refresh', [MediaArchiveAdminController::class, 'refreshPublicToken'], $auth);
     }
 }

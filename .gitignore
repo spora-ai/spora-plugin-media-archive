@@ -12,3 +12,5 @@
 .DS_Store
 /.worktrees/
 /tmp/
+/public/
+.phpstan-cache/
