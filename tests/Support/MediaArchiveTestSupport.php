@@ -12,7 +12,6 @@ use ReflectionNamedType;
 use RuntimeException;
 use Spora\Auth\AuthService;
 use Spora\Services\AssetStore;
-use Spora\Services\MediaArchive\MediaArchiveIngestPipeline;
 use Spora\Services\MediaArchive\MediaArchiveService;
 use Spora\Services\MediaArchive\MediaArchiveUrlResolver;
 use Spora\Services\MediaArchive\MediaConverterDiscovery;
@@ -69,14 +68,17 @@ final class MediaArchiveTestSupport
         // so this support class works against either, with no need to
         // touch the dependency pin per release — the construction itself
         // goes through ReflectionClass so PHPStan can't insist on a
-        // single signature.
+        // single signature, and the pipeline branch is reached through a
+        // class name string so PHPStan on v0.13.0 (where the class does
+        // not exist) doesn't flag the reference as unresolved.
         $serviceCtor = (new ReflectionClass(MediaArchiveService::class))->getConstructor();
         $firstType = $serviceCtor?->getParameters()[0]?->getType();
         $firstTypeName = $firstType instanceof ReflectionNamedType ? $firstType->getName() : null;
 
-        $args = $firstTypeName === MediaArchiveIngestPipeline::class
+        $pipelineFqcn = 'Spora\\Services\\MediaArchive\\MediaArchiveIngestPipeline';
+        $args = $firstTypeName === $pipelineFqcn
             ? [
-                new MediaArchiveIngestPipeline(
+                new $pipelineFqcn(
                     new MediaIngestDecoder(),
                     $resolver,
                     $sniffer,
