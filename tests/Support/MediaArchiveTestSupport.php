@@ -66,39 +66,38 @@ final class MediaArchiveTestSupport
         // takes the collaborators directly; v0.18+ folds them into a
         // MediaArchiveIngestPipeline. Dispatch on the declared constructor
         // so this support class works against either, with no need to
-        // touch the dependency pin per release — the construction itself
-        // goes through ReflectionClass so PHPStan can't insist on a
-        // single signature, and the pipeline branch is reached through a
-        // class name string so PHPStan on v0.13.0 (where the class does
-        // not exist) doesn't flag the reference as unresolved.
+        // touch the dependency pin per release — both branches construct
+        // via ReflectionClass so PHPStan can't insist on a single
+        // signature or flag a missing class on whichever version isn't
+        // installed.
         $serviceCtor = (new ReflectionClass(MediaArchiveService::class))->getConstructor();
         $firstType = $serviceCtor?->getParameters()[0]?->getType();
         $firstTypeName = $firstType instanceof ReflectionNamedType ? $firstType->getName() : null;
 
         $pipelineFqcn = 'Spora\\Services\\MediaArchive\\MediaArchiveIngestPipeline';
-        $args = $firstTypeName === $pipelineFqcn
-            ? [
-                new $pipelineFqcn(
-                    new MediaIngestDecoder(),
-                    $resolver,
-                    $sniffer,
-                    $metadata,
-                    $assetStore,
-                    self::buildConverterRegistry(),
-                    $logger,
-                ),
-            ]
-            : [
-                $assetStore,
+        if ($firstTypeName === $pipelineFqcn) {
+            $pipeline = (new ReflectionClass($pipelineFqcn))->newInstanceArgs([
+                new MediaIngestDecoder(),
                 $resolver,
                 $sniffer,
                 $metadata,
+                $assetStore,
                 self::buildConverterRegistry(),
-                new MediaIngestDecoder(),
                 $logger,
-            ];
+            ]);
 
-        return (new ReflectionClass(MediaArchiveService::class))->newInstanceArgs($args);
+            return (new ReflectionClass(MediaArchiveService::class))->newInstanceArgs([$pipeline]);
+        }
+
+        return (new ReflectionClass(MediaArchiveService::class))->newInstanceArgs([
+            $assetStore,
+            $resolver,
+            $sniffer,
+            $metadata,
+            self::buildConverterRegistry(),
+            new MediaIngestDecoder(),
+            $logger,
+        ]);
     }
 
     public static function buildConverterRegistry(): MediaConverterRegistry
