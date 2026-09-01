@@ -8,6 +8,7 @@ use Mockery;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use ReflectionClass;
+use ReflectionNamedType;
 use RuntimeException;
 use Spora\Auth\AuthService;
 use Spora\Services\AssetStore;
@@ -20,8 +21,6 @@ use Spora\Services\MediaArchive\MediaIngestDecoder;
 use Spora\Services\MediaArchive\MetadataExtractor;
 use Spora\Services\MediaArchive\MimeSniffer;
 use Spora\Services\MediaArchive\RemoteMediaFetcher;
-use Spora\Services\PrincipalResolver;
-use Spora\Services\PrincipalService;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -63,21 +62,41 @@ final class MediaArchiveTestSupport
             $maxPromoteBytes,
         );
 
-        // spora-core v0.18+ refactored MediaArchiveService to take a
-        // MediaArchiveIngestPipeline; the service itself no longer
-        // touches the asset store / sniffer / decoder directly. Mirror
-        // the host's tests/Support/MediaArchiveTestSupport.php signature.
-        $pipeline = new MediaArchiveIngestPipeline(
-            new MediaIngestDecoder(),
-            $resolver,
-            $sniffer,
-            $metadata,
-            $assetStore,
-            self::buildConverterRegistry(),
-            $logger,
-        );
+        // MediaArchiveService's constructor changed shape between
+        // spora-core releases: v0.13.x (the locked dependency CI installs)
+        // takes the collaborators directly; v0.18+ folds them into a
+        // MediaArchiveIngestPipeline. Dispatch on the declared constructor
+        // so this support class works against either, with no need to
+        // touch the dependency pin per release — the construction itself
+        // goes through ReflectionClass so PHPStan can't insist on a
+        // single signature.
+        $serviceCtor = (new ReflectionClass(MediaArchiveService::class))->getConstructor();
+        $firstType = $serviceCtor?->getParameters()[0]?->getType();
+        $firstTypeName = $firstType instanceof ReflectionNamedType ? $firstType->getName() : null;
 
-        return new MediaArchiveService($pipeline);
+        $args = $firstTypeName === MediaArchiveIngestPipeline::class
+            ? [
+                new MediaArchiveIngestPipeline(
+                    new MediaIngestDecoder(),
+                    $resolver,
+                    $sniffer,
+                    $metadata,
+                    $assetStore,
+                    self::buildConverterRegistry(),
+                    $logger,
+                ),
+            ]
+            : [
+                $assetStore,
+                $resolver,
+                $sniffer,
+                $metadata,
+                self::buildConverterRegistry(),
+                new MediaIngestDecoder(),
+                $logger,
+            ];
+
+        return (new ReflectionClass(MediaArchiveService::class))->newInstanceArgs($args);
     }
 
     public static function buildConverterRegistry(): MediaConverterRegistry
