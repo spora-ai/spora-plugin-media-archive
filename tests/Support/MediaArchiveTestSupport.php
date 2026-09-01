@@ -75,7 +75,11 @@ final class MediaArchiveTestSupport
         $firstTypeName = $firstType instanceof ReflectionNamedType ? $firstType->getName() : null;
 
         $pipelineFqcn = 'Spora\\Services\\MediaArchive\\MediaArchiveIngestPipeline';
-        if ($firstTypeName === $pipelineFqcn) {
+        // Build the args for the v0.18+ pipeline shape only when the
+        // locked dependency actually has that class — `class_exists`
+        // resolves the string at runtime so PHPStan can't narrow the
+        // literal to a missing class-string on v0.13.0.
+        if ($firstTypeName === $pipelineFqcn && class_exists($pipelineFqcn)) {
             $pipeline = (new ReflectionClass($pipelineFqcn))->newInstanceArgs([
                 new MediaIngestDecoder(),
                 $resolver,
