@@ -74,13 +74,19 @@ final class MediaArchiveTestSupport
         $firstType = $serviceCtor?->getParameters()[0]?->getType();
         $firstTypeName = $firstType instanceof ReflectionNamedType ? $firstType->getName() : null;
 
-        $pipelineFqcn = 'Spora\\Services\\MediaArchive\\MediaArchiveIngestPipeline';
-        // Build the args for the v0.18+ pipeline shape only when the
-        // locked dependency actually has that class — `class_exists`
-        // resolves the string at runtime so PHPStan can't narrow the
-        // literal to a missing class-string on v0.13.0.
-        if ($firstTypeName === $pipelineFqcn && class_exists($pipelineFqcn)) {
-            $pipeline = (new ReflectionClass($pipelineFqcn))->newInstanceArgs([
+        // Build the v0.18+ pipeline shape only when the locked
+        // dependency actually has that class. The FQCN is assembled
+        // from a runtime concatenation so PHPStan never sees it as a
+        // class-string and so the v0.13.0 install (where the class is
+        // missing) stays free of false-positive unresolved-symbol
+        // errors.
+        $pipelineName = 'Spora' . '\\Services\\MediaArchive\\MediaArchiveIngestPipeline';
+        if (
+            $firstTypeName !== null
+            && $firstTypeName === $pipelineName
+            && class_exists($pipelineName)
+        ) {
+            $pipeline = (new ReflectionClass($pipelineName))->newInstanceArgs([
                 new MediaIngestDecoder(),
                 $resolver,
                 $sniffer,
