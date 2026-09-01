@@ -11,6 +11,7 @@ use ReflectionClass;
 use RuntimeException;
 use Spora\Auth\AuthService;
 use Spora\Services\AssetStore;
+use Spora\Services\MediaArchive\MediaArchiveIngestPipeline;
 use Spora\Services\MediaArchive\MediaArchiveService;
 use Spora\Services\MediaArchive\MediaArchiveUrlResolver;
 use Spora\Services\MediaArchive\MediaConverterDiscovery;
@@ -19,6 +20,8 @@ use Spora\Services\MediaArchive\MediaIngestDecoder;
 use Spora\Services\MediaArchive\MetadataExtractor;
 use Spora\Services\MediaArchive\MimeSniffer;
 use Spora\Services\MediaArchive\RemoteMediaFetcher;
+use Spora\Services\PrincipalResolver;
+use Spora\Services\PrincipalService;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -60,15 +63,21 @@ final class MediaArchiveTestSupport
             $maxPromoteBytes,
         );
 
-        return new MediaArchiveService(
-            $assetStore,
+        // spora-core v0.18+ refactored MediaArchiveService to take a
+        // MediaArchiveIngestPipeline; the service itself no longer
+        // touches the asset store / sniffer / decoder directly. Mirror
+        // the host's tests/Support/MediaArchiveTestSupport.php signature.
+        $pipeline = new MediaArchiveIngestPipeline(
+            new MediaIngestDecoder(),
             $resolver,
             $sniffer,
             $metadata,
+            $assetStore,
             self::buildConverterRegistry(),
-            new MediaIngestDecoder(),
             $logger,
         );
+
+        return new MediaArchiveService($pipeline);
     }
 
     public static function buildConverterRegistry(): MediaConverterRegistry
