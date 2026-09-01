@@ -67,26 +67,19 @@ final class MediaArchiveTestSupport
         // MediaArchiveIngestPipeline. Dispatch on the declared constructor
         // so this support class works against either, with no need to
         // touch the dependency pin per release — both branches construct
-        // via ReflectionClass so PHPStan can't insist on a single
-        // signature or flag a missing class on whichever version isn't
-        // installed.
+        // through a helper that takes a plain `string` so PHPStan can't
+        // narrow the FQCN into a missing class-string on v0.13.0.
         $serviceCtor = (new ReflectionClass(MediaArchiveService::class))->getConstructor();
         $firstType = $serviceCtor?->getParameters()[0]?->getType();
         $firstTypeName = $firstType instanceof ReflectionNamedType ? $firstType->getName() : null;
 
-        // Build the v0.18+ pipeline shape only when the locked
-        // dependency actually has that class. The FQCN is assembled
-        // from a runtime concatenation so PHPStan never sees it as a
-        // class-string and so the v0.13.0 install (where the class is
-        // missing) stays free of false-positive unresolved-symbol
-        // errors.
         $pipelineName = 'Spora' . '\\Services\\MediaArchive\\MediaArchiveIngestPipeline';
         if (
             $firstTypeName !== null
             && $firstTypeName === $pipelineName
             && class_exists($pipelineName)
         ) {
-            $pipeline = (new ReflectionClass($pipelineName))->newInstanceArgs([
+            $pipeline = self::newInstanceViaReflection($pipelineName, [
                 new MediaIngestDecoder(),
                 $resolver,
                 $sniffer,
@@ -96,10 +89,10 @@ final class MediaArchiveTestSupport
                 $logger,
             ]);
 
-            return (new ReflectionClass(MediaArchiveService::class))->newInstanceArgs([$pipeline]);
+            return self::newInstanceViaReflection(MediaArchiveService::class, [$pipeline]);
         }
 
-        return (new ReflectionClass(MediaArchiveService::class))->newInstanceArgs([
+        return self::newInstanceViaReflection(MediaArchiveService::class, [
             $assetStore,
             $resolver,
             $sniffer,
@@ -108,6 +101,20 @@ final class MediaArchiveTestSupport
             new MediaIngestDecoder(),
             $logger,
         ]);
+    }
+
+    /**
+     * Construct an instance of `$class` with `$args` via ReflectionClass.
+     *
+     * The `$class` parameter is typed as a plain `string` (not
+     * `class-string`) on purpose: the helper may receive FQCNs that
+     * point at classes missing from the analysed spora-core version,
+     * and PHPStan refuses to narrow `string` into a missing
+     * class-string the way it would a literal class reference.
+     */
+    private static function newInstanceViaReflection(string $class, array $args): object
+    {
+        return (new ReflectionClass($class))->newInstanceArgs($args);
     }
 
     public static function buildConverterRegistry(): MediaConverterRegistry
