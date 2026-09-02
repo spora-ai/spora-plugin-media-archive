@@ -10,3 +10,4 @@ parameters:
         - vendor
     bootstrapFiles:
         - vendor/autoload.php
+        - tests/bootstrap.php
