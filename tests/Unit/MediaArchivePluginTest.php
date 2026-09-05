@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use DI\ContainerBuilder;
+use Spora\Plugins\MediaArchive\Http\MediaArchiveAdminController;
 use Spora\Plugins\MediaArchive\MediaArchiveApp;
 use Spora\Plugins\MediaArchive\MediaArchivePlugin;
 
@@ -53,4 +55,20 @@ it('declares no extra PSR-4 mappings', function (): void {
     $plugin = new MediaArchivePlugin();
 
     expect($plugin->autoload())->toBe([]);
+});
+
+it('register() wires MediaArchiveAdminController into the PHP-DI container', function (): void {
+    // The controller must be explicitly registered: without
+    // \DI\autowire() + constructorParameter(), PHP-DI resolves
+    // `$container->get($controllerClass)` via the no-definition path
+    // and falls back to `new $controllerClass()` with no arguments,
+    // so the nullable `?MediaDerivativeService` ctor arg stays null
+    // and `GET /api/v1/media/{id}` returns `derivatives: []` on reload.
+    $builder = new ContainerBuilder();
+    $builder->useAutowiring(true);
+
+    (new MediaArchivePlugin())->register($builder);
+
+    $container = $builder->build();
+    expect($container->has(MediaArchiveAdminController::class))->toBeTrue();
 });
