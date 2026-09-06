@@ -13,9 +13,11 @@ use Spora\Plugins\MediaArchive\Tests\Support\MediaArchiveTestSupport;
 use Spora\Services\AutoAssetStore;
 use Spora\Services\DatabaseAssetStore;
 use Spora\Services\LocalAssetStore;
+use Spora\Services\MediaArchive\DerivativeOutput;
 use Spora\Services\MediaArchive\MediaArchiveService;
 use Spora\Services\MediaArchive\MediaAssetSerializer;
 use Spora\Services\MediaArchive\MediaConverterDiscovery;
+use Spora\Services\MediaArchive\MediaDerivativeService;
 use Spora\Services\MediaArchive\MediaIngestRequest;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -147,6 +149,50 @@ test('show returns 404 for unknown id', function (): void {
     [, , $controller] = buildUpdateController();
     $resp = $controller->show('00000000-0000-0000-0000-000000000000');
     expect($resp->getStatusCode())->toBe(404);
+});
+
+test('show includes persisted derivatives when MediaDerivativeService is wired', function (): void {
+    // Regression: derivatives were missing from `GET /api/v1/media/{id}`
+    // because the controller built its serializer via the no-arg default,
+    // which sets `$includeDerivatives: true` but leaves the
+    // MediaDerivativeService null → `loadDerivatives()` returns `[]` and
+    // the detail page's chip row resets on every reload.
+    [, $service, $baseController] = buildUpdateController();
+    $parent = ingestSample($service, 1);
+    $assetStore = new AutoAssetStore(
+        new DatabaseAssetStore(50 * 1024 * 1024),
+        new LocalAssetStore(new Paths(BASE_PATH), new SecurityManager(str_repeat("\0", SODIUM_CRYPTO_SECRETBOX_KEYBYTES)), 50 * 1024 * 1024),
+        1_048_576,
+    );
+    $derivatives = new MediaDerivativeService(
+        $assetStore,
+        new \Spora\Services\PrincipalService(new \Spora\Services\PrincipalResolver()),
+    );
+    $derivatives->create($parent, new DerivativeOutput('pdf-bytes', 'application/pdf'), 'pdf', 'spora-plugin-typst', 'render');
+
+    $controller = new MediaArchiveAdminController(
+        $service,
+        stubAuth(1, true),
+        $derivatives,
+    );
+    $resp = $controller->show($parent->id);
+    expect($resp->getStatusCode())->toBe(200);
+    $body = json_decode($resp->getContent(), true);
+    expect($body['data']['derivatives'])->toBeArray();
+    expect($body['data']['derivatives'])->toHaveCount(1);
+    expect($body['data']['derivatives'][0]['format'])->toBe('pdf');
+    expect($body['data']['derivatives'][0]['producer_plugin'])->toBe('spora-plugin-typst');
+});
+
+test('show returns derivatives: [] when MediaDerivativeService is not wired', function (): void {
+    // The previous behaviour: the controller defaults to a no-service
+    // serializer, so derivatives stay an empty array. Tests pinning the
+    // legacy contract stay green until we explicitly opt in.
+    [, $service, $controller] = buildUpdateController();
+    $parent = ingestSample($service, 1);
+    $resp = $controller->show($parent->id);
+    $body = json_decode($resp->getContent(), true);
+    expect($body['data']['derivatives'])->toBe([]);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -430,6 +476,7 @@ function buildSharingController(bool $isAdmin = true, int $userId = 1): array
         new MediaArchiveAdminController(
             $service,
             stubAuth($userId, $isAdmin),
+            null,
             new MediaAssetSerializer(),
             ['app_url' => 'https://test.example/'],
         ),

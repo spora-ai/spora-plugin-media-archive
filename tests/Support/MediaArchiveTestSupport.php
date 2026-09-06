@@ -20,6 +20,8 @@ use Spora\Services\MediaArchive\MediaIngestDecoder;
 use Spora\Services\MediaArchive\MetadataExtractor;
 use Spora\Services\MediaArchive\MimeSniffer;
 use Spora\Services\MediaArchive\RemoteMediaFetcher;
+use Spora\Services\PrincipalResolver;
+use Spora\Services\PrincipalService;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -79,15 +81,30 @@ final class MediaArchiveTestSupport
             && $firstTypeName === $pipelineName
             && class_exists($pipelineName)
         ) {
-            $pipeline = self::newInstanceViaReflection($pipelineName, [
+            // v0.19+ takes `PrincipalService` as the 7th arg (before the
+            // optional logger); v0.18 had a 7-arg ctor ending in the
+            // logger. Inspect the param count to keep both shapes
+            // working without forcing a lock bump per release.
+            $pipelineCtor = (new ReflectionClass($pipelineName))->getConstructor();
+            $pipelineArgs = [
                 new MediaIngestDecoder(),
                 $resolver,
                 $sniffer,
                 $metadata,
                 $assetStore,
                 self::buildConverterRegistry(),
-                $logger,
-            ]);
+            ];
+            $expectedCount = $pipelineCtor === null
+                ? count($pipelineArgs)
+                : count($pipelineCtor->getParameters());
+            if ($expectedCount >= 7) {
+                $pipelineArgs[] = new PrincipalService(new PrincipalResolver());
+            }
+            if ($expectedCount >= 8) {
+                $pipelineArgs[] = $logger;
+            }
+
+            $pipeline = self::newInstanceViaReflection($pipelineName, $pipelineArgs);
 
             return self::newInstanceViaReflection(MediaArchiveService::class, [$pipeline]);
         }

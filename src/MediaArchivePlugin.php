@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\MediaArchive;
 
+use DI\ContainerBuilder;
 use Spora\Apps\AppInterface;
 use Spora\Core\MiddlewareRouteCollector;
 use Spora\Http\Middleware\AuthMiddleware;
@@ -41,6 +42,27 @@ final class MediaArchivePlugin extends AbstractPlugin
     public function getName(): string
     {
         return 'Media Archive';
+    }
+
+    /**
+     * PHP-DI needs explicit `\DI\autowire()` registration for plugin
+     * controllers — without it, `$container->get($controllerClass)`
+     * resolves via the no-definition path and PHP-DI falls back to
+     * `new $controllerClass()` with no arguments, so the optional
+     * `?MediaDerivativeService` ctor arg stays null and the detail
+     * page loses its derivatives on reload. `MemoriesPlugin::register()`
+     * follows the same pattern.
+     */
+    public function register(ContainerBuilder $builder): void
+    {
+        // `\DI\autowire()` honours the ctor's `= null` defaults for
+        // nullable params, which silently skips the
+        // `MediaDerivativeService` injection. Force the param so the
+        // detail page gets derivatives on reload.
+        $builder->addDefinitions([
+            MediaArchiveAdminController::class => \DI\autowire()
+                ->constructorParameter('derivatives', \DI\get(\Spora\Services\MediaArchive\MediaDerivativeService::class)),
+        ]);
     }
 
     /**

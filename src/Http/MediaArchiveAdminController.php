@@ -10,6 +10,7 @@ use Spora\Http\JsonControllerHelpers;
 use Spora\Models\MediaAsset;
 use Spora\Services\MediaArchive\MediaArchiveService;
 use Spora\Services\MediaArchive\MediaAssetSerializer;
+use Spora\Services\MediaArchive\MediaDerivativeService;
 use Spora\Services\Text\Utf8Sanitizer;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -43,6 +44,9 @@ final class MediaArchiveAdminController
     public function __construct(
         private readonly MediaArchiveService $mediaArchive,
         private readonly AuthService $auth,
+        // PHP-DI autowires a real instance in production; tests pass
+        // null and rely on the explicit `$serializer` arg instead.
+        private readonly ?MediaDerivativeService $derivatives = null,
         private readonly MediaAssetSerializer $serializer = new MediaAssetSerializer(),
         private readonly array $config = [],
     ) {}
@@ -54,7 +58,7 @@ final class MediaArchiveAdminController
             return $this->notFound('NOT_FOUND', self::MSG_NOT_FOUND);
         }
 
-        return new JsonResponse(['data' => $this->serializer->serialize($asset)]);
+        return new JsonResponse(['data' => $this->serializer()->serialize($asset)]);
     }
 
     public function update(string $id, Request $request): JsonResponse
@@ -76,7 +80,7 @@ final class MediaArchiveAdminController
             $editable->save();
         }
 
-        return new JsonResponse(['data' => $this->serializer->serialize($editable, $this->configUrl())]);
+        return new JsonResponse(['data' => $this->serializer()->serialize($editable, $this->configUrl())]);
     }
 
     public function destroy(string $id): JsonResponse
@@ -107,7 +111,21 @@ final class MediaArchiveAdminController
         }
         $asset->public_access_token = MediaArchiveService::mintPublicAccessToken();
         $asset->save();
-        return new JsonResponse(['data' => $this->serializer->serialize($asset, $this->configUrl())]);
+        return new JsonResponse(['data' => $this->serializer()->serialize($asset, $this->configUrl())]);
+    }
+
+    /**
+     * Build a serializer that loads persisted derivatives when the
+     * service was wired in. Without this swap the detail page always
+     * sees `derivatives: []` on reload — `onDerivativeProduced()` only
+     * covers the in-memory splice, a hard refresh re-fetches
+     * `GET /api/v1/media/{id}`.
+     */
+    private function serializer(): MediaAssetSerializer
+    {
+        return $this->derivatives !== null
+            ? new MediaAssetSerializer(true, $this->derivatives)
+            : $this->serializer;
     }
 
     private function findEditableAsset(string $id): MediaAsset|JsonResponse
