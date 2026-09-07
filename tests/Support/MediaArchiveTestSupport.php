@@ -81,10 +81,6 @@ final class MediaArchiveTestSupport
             && $firstTypeName === $pipelineName
             && class_exists($pipelineName)
         ) {
-            // v0.19+ takes `PrincipalService` as the 7th arg (before the
-            // optional logger); v0.18 had a 7-arg ctor ending in the
-            // logger. Inspect the param count to keep both shapes
-            // working without forcing a lock bump per release.
             $pipelineCtor = (new ReflectionClass($pipelineName))->getConstructor();
             $pipelineArgs = [
                 new MediaIngestDecoder(),
@@ -93,13 +89,11 @@ final class MediaArchiveTestSupport
                 $metadata,
                 $assetStore,
                 self::buildConverterRegistry(),
+                new PrincipalService(new PrincipalResolver()),
             ];
             $expectedCount = $pipelineCtor === null
                 ? count($pipelineArgs)
                 : count($pipelineCtor->getParameters());
-            if ($expectedCount >= 7) {
-                $pipelineArgs[] = new PrincipalService(new PrincipalResolver());
-            }
             if ($expectedCount >= 8) {
                 $pipelineArgs[] = $logger;
             }

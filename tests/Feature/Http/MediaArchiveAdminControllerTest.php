@@ -152,11 +152,6 @@ test('show returns 404 for unknown id', function (): void {
 });
 
 test('show includes persisted derivatives when MediaDerivativeService is wired', function (): void {
-    // Regression: derivatives were missing from `GET /api/v1/media/{id}`
-    // because the controller built its serializer via the no-arg default,
-    // which sets `$includeDerivatives: true` but leaves the
-    // MediaDerivativeService null → `loadDerivatives()` returns `[]` and
-    // the detail page's chip row resets on every reload.
     [, $service, $baseController] = buildUpdateController();
     $parent = ingestSample($service, 1);
     $assetStore = new AutoAssetStore(

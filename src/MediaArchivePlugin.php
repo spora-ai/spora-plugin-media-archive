@@ -50,8 +50,9 @@ final class MediaArchivePlugin extends AbstractPlugin
      * resolves via the no-definition path and PHP-DI falls back to
      * `new $controllerClass()` with no arguments, so the optional
      * `?MediaDerivativeService` ctor arg stays null and the detail
-     * page loses its derivatives on reload. `MemoriesPlugin::register()`
-     * follows the same pattern.
+     * page loses its derivatives on reload. This follows the same
+     * pattern as other plugins; the constructor-parameter injection
+     * here is plugin-specific.
      */
     public function register(ContainerBuilder $builder): void
     {
