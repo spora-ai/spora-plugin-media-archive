@@ -45,9 +45,9 @@ final class MediaArchiveAdminController
         private readonly MediaArchiveService $mediaArchive,
         private readonly AuthService $auth,
         // PHP-DI autowires a real instance in production; tests pass
-        // null and rely on the explicit `$serializer` arg instead.
+        // null and rely on the explicit `$defaultSerializer` arg instead.
         private readonly ?MediaDerivativeService $derivatives = null,
-        private readonly MediaAssetSerializer $serializer = new MediaAssetSerializer(),
+        private readonly MediaAssetSerializer $defaultSerializer = new MediaAssetSerializer(),
         private readonly array $config = [],
     ) {}
 
@@ -125,7 +125,7 @@ final class MediaArchiveAdminController
     {
         return $this->derivatives !== null
             ? new MediaAssetSerializer(true, $this->derivatives)
-            : $this->serializer;
+            : $this->defaultSerializer;
     }
 
     private function findEditableAsset(string $id): MediaAsset|JsonResponse

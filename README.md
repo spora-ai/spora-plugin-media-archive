@@ -13,7 +13,7 @@ composer require spora-ai/spora-plugin-media-archive-frontend
 
 Both packages are required: the PHP package contributes the admin-panel metadata (`MediaArchiveApp` → `VueAppInterface`), and the frontend package ships the Vue IIFE bundle that the host SPA lazy-loads at runtime.
 
-Requires `spora-ai/spora-core` ≥ 0.11.1 (ships the standalone `MediaAssetSerializer` that emits the asset `filename` on the wire — versions prior to 0.11.1 render `unknown` on the admin panel because the controller's inline `serialize()` omits the field).
+Requires `spora-ai/spora-core` ≥ 0.20.0 (ships `MediaDerivativeService` and the two-arg `MediaAssetSerializer` used to surface persisted derivatives on the detail page; versions prior to 0.20.0 leave the VersionsStrip empty on reload).
 
 ## What it does
 
@@ -21,6 +21,7 @@ Requires `spora-ai/spora-core` ≥ 0.11.1 (ships the standalone `MediaAssetSeria
 - Filters by media type, plugin, tool, agent, and date range.
 - Scope chip row (mirrors the dashboard's ALL / My Media / Group pattern) so a user with multiple groups can isolate each group's media. The chip row reads `/principals/me` + `/groups` to populate the labels; the controller intersects `?principal_id=` with the caller's `visiblePrincipalIds()` so an out-of-scope principal id is silently dropped.
 - Click-through detail drawer with metadata (dimensions, duration, mime type, source URL).
+- A `derivatives` strip below the asset row (format chip + producer + asset URL). Populated from the `media_derivatives` join table; the controller reads it via `MediaDerivativeService::listFor()` so chips survive a hard reload, not just the in-memory splice on derivative production.
 - One-click download via the existing `AssetController::show()` route.
 
 The plugin itself adds no tools, drivers, recipes, or migrations — it is purely presentational.
