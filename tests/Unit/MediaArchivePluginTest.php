@@ -34,10 +34,9 @@ it('registers MediaArchiveApp in apps()', function (): void {
 });
 
 it('advertises Media Archive as its name', function (): void {
-    // The default {@see \Spora\Plugins\AbstractPlugin::getName()} would
-    // return "Media Archive" via reflection on the class short name, but
-    // we override it explicitly so the value is greppable and not coupled
-    // to the FQCN.
+    // ReflectionClass::getShortName() would return 'MediaArchivePlugin' and
+    // the default strip leaves 'MediaArchive' (no separator); the override
+    // below humanizes the operator-facing label.
     $plugin = new MediaArchivePlugin();
 
     expect($plugin->getName())->toBe('Media Archive');
