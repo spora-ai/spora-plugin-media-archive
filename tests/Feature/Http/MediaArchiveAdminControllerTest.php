@@ -162,6 +162,7 @@ test('show includes persisted derivatives when MediaDerivativeService is wired',
     $derivatives = new MediaDerivativeService(
         $assetStore,
         new \Spora\Services\PrincipalService(new \Spora\Services\PrincipalResolver()),
+        new \DI\Container(),
     );
     $derivatives->create($parent, new DerivativeOutput('pdf-bytes', 'application/pdf'), 'pdf', 'spora-plugin-typst', 'render');
 

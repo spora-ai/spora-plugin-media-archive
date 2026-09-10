@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\MediaArchive;
 
-use DI\ContainerBuilder;
 use Spora\Apps\AppInterface;
-use Spora\Core\MiddlewareRouteCollector;
+use Spora\Events\ContainerBuildingEvent;
+use Spora\Events\RoutesRegisteringEvent;
 use Spora\Http\Middleware\AuthMiddleware;
 use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
 use Spora\Plugins\MediaArchive\Http\MediaArchiveAdminController;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
  * Plugin entry point — extending {@see AbstractPlugin} (rather than directly
@@ -34,10 +35,17 @@ use Spora\Plugins\MediaArchive\Http\MediaArchiveAdminController;
  * {@see \Spora\Plugins\PluginLoader} resolves the class via PSR-4 autoloading
  * and throws {@see \Spora\Plugins\Exceptions\PluginLoadFailedException} on
  * miss — see CLAUDE.md § Plugin authoring.
+ *
+ * Side-effect wiring (DI bindings + routes) is delivered through
+ * {@see EventSubscriberInterface} so {@see \Spora\Plugins\PluginLoader}'s
+ * subscriber-wiring loop picks it up on every request, including warm
+ * cache boots. See `spora-workspace/plans/extension-interface-events.md`.
  */
-final class MediaArchivePlugin extends AbstractPlugin
+final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriberInterface
 {
     private const ROUTE_MEDIA_ITEM = '/api/v1/media/{id}';
+
+    private const AUTH = [AuthMiddleware::class, CsrfMiddleware::class];
 
     public function getName(): string
     {
@@ -45,25 +53,53 @@ final class MediaArchivePlugin extends AbstractPlugin
     }
 
     /**
-     * PHP-DI needs explicit `\DI\autowire()` registration for plugin
-     * controllers — without it, `$container->get($controllerClass)`
-     * resolves via the no-definition path and PHP-DI falls back to
-     * `new $controllerClass()` with no arguments, so the optional
-     * `?MediaDerivativeService` ctor arg stays null and the detail
-     * page loses its derivatives on reload. This follows the same
-     * pattern as other plugins; the constructor-parameter injection
-     * here is plugin-specific.
+     * @return array<string, string>
      */
-    public function register(ContainerBuilder $builder): void
+    public static function getSubscribedEvents(): array
     {
-        // `\DI\autowire()` honours the ctor's `= null` defaults for
-        // nullable params, which silently skips the
-        // `MediaDerivativeService` injection. Force the param so the
-        // detail page gets derivatives on reload.
-        $builder->addDefinitions([
+        return [
+            ContainerBuildingEvent::class => 'onContainerBuilding',
+            RoutesRegisteringEvent::class => 'onRoutesRegistering',
+        ];
+    }
+
+    /**
+     * Force-inject {@see \Spora\Services\MediaArchive\MediaDerivativeService}
+     * into {@see MediaArchiveAdminController}'s nullable `?MediaDerivativeService`
+     * ctor arg via `\DI\autowire()->constructorParameter(...)`.
+     *
+     * `\DI\autowire()` honours the ctor's `= null` defaults for nullable
+     * params, which silently skips the `MediaDerivativeService` injection.
+     * Force the param so the detail page gets derivatives on reload.
+     */
+    public function onContainerBuilding(ContainerBuildingEvent $event): void
+    {
+        $event->builder()->addDefinitions([
             MediaArchiveAdminController::class => \DI\autowire()
                 ->constructorParameter('derivatives', \DI\get(\Spora\Services\MediaArchive\MediaDerivativeService::class)),
         ]);
+    }
+
+    /**
+     * Register the four plugin-owned admin routes
+     * (`GET`/`PATCH`/`DELETE` `/api/v1/media/{id}` and
+     * `POST /api/v1/media/{id}/public-token/refresh`) behind Auth + CSRF.
+     *
+     * These used to live in spora-core's `MediaArchiveController`; spora-core
+     * PR #221 trimmed that controller to `index()` only and the four
+     * mutating endpoints moved here so the plugin owns its CRUD end-to-end,
+     * mirroring the `spora-plugin-memories` pattern. The list endpoint
+     * stays in core because the composer and upload UI also call it.
+     *
+     * Fires per request after the project's App routes are registered
+     * (see {@see \Spora\Plugins\PluginLoader::registerRoutes()}).
+     */
+    public function onRoutesRegistering(RoutesRegisteringEvent $event): void
+    {
+        $event->routes()->addRoute('GET', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'show'], self::AUTH);
+        $event->routes()->addRoute('PATCH', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'update'], self::AUTH);
+        $event->routes()->addRoute('DELETE', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'destroy'], self::AUTH);
+        $event->routes()->addRoute('POST', self::ROUTE_MEDIA_ITEM . '/public-token/refresh', [MediaArchiveAdminController::class, 'refreshPublicToken'], self::AUTH);
     }
 
     /**
@@ -78,29 +114,5 @@ final class MediaArchivePlugin extends AbstractPlugin
         return [
             MediaArchiveApp::class,
         ];
-    }
-
-    /**
-     * Register the four plugin-owned admin routes
-     * (`GET`/`PATCH`/`DELETE` `/api/v1/media/{id}` and
-     * `POST /api/v1/media/{id}/public-token/refresh`) behind Auth + CSRF.
-     *
-     * These used to live in spora-core's `MediaArchiveController`; spora-core
-     * PR #221 trimmed that controller to `index()` only and the four
-     * mutating endpoints moved here so the plugin owns its CRUD end-to-end,
-     * mirroring the `spora-plugin-memories` pattern. The list endpoint
-     * stays in core because the composer and upload UI also call it.
-     *
-     * Invoked per request after the project's App routes are registered
-     * (see {@see \Spora\Plugins\PluginLoader::registerRoutes()}).
-     */
-    public function routes(MiddlewareRouteCollector $r): void
-    {
-        $auth = [AuthMiddleware::class, CsrfMiddleware::class];
-
-        $r->addRoute('GET', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'show'], $auth);
-        $r->addRoute('PATCH', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'update'], $auth);
-        $r->addRoute('DELETE', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'destroy'], $auth);
-        $r->addRoute('POST', self::ROUTE_MEDIA_ITEM . '/public-token/refresh', [MediaArchiveAdminController::class, 'refreshPublicToken'], $auth);
     }
 }
