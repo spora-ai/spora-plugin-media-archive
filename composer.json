@@ -15,10 +15,7 @@
         "phpstan/phpstan": "^2.1",
         "phpstan/phpstan-mockery": "^2.0"
     },
-    "suggest": {
-        "spora-ai/spora-plugin-minimax": "Image, speech, music, and video generation — rows produced by these tools show up here.",
-        "spora-ai/spora-plugin-email": "Email send/receive with attachment handling — outbound attachments surface as archived documents."
-    },
+    "suggest": {},
     "autoload": {
         "psr-4": {
             "Spora\\Plugins\\MediaArchive\\": "src/"
