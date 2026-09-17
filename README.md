@@ -28,10 +28,11 @@ The plugin itself adds no tools, drivers, recipes, or migrations — it is purel
 
 ## Companion plugins
 
-Listed in `composer.json` under `suggest`:
-
-- `spora-ai/spora-plugin-minimax` — image, speech, music, and video generation. Rows produced by these tools show up here.
-- `spora-ai/spora-plugin-email` — email send/receive. Outbound attachments surface as archived documents.
+This plugin has no `suggest` block. Producer plugins (spora-plugin-minimax,
+spora-plugin-openai-image, spora-plugin-typst) declare media-archive as a
+companion suggestion in their own detail dialogs, so installing any of them
+surfaces media-archive as an installable companion on the producer side.
+See each producer's README for the current list.
 
 ## Reference
 
