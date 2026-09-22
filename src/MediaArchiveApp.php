@@ -49,9 +49,6 @@ final class MediaArchiveApp implements VueAppInterface
 
     public function accent(): string
     {
-        // `amber` token from plugin.schema.json's `accent` enum — same
-        // colour the navbar drawer used to hardcode before the host
-        // read the value from the plugin. See spora-ai/spora-core#264.
         return 'amber';
     }
 
