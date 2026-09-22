@@ -47,6 +47,11 @@ final class MediaArchiveApp implements VueAppInterface
         return 'image';
     }
 
+    public function accent(): string
+    {
+        return 'amber';
+    }
+
     public function entry(): string
     {
         return 'main.js';
