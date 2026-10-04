@@ -157,7 +157,12 @@ final class MediaArchiveAdminController
     private function extractUpdatableFields(array $body): array
     {
         $dirty = [];
-        foreach (['filename', 'tags', 'metadata', 'prompt', 'markdown_content'] as $field) {
+        // `markdown_content` left this allowlist when document
+        // extraction moved to `md` derivatives in spora-core. The list
+        // stays an allowlist, so a stale client that still PATCHes the
+        // key gets a silent no-op rather than a write to a column that
+        // no longer exists.
+        foreach (['filename', 'tags', 'metadata', 'prompt'] as $field) {
             if (array_key_exists($field, $body)) {
                 $dirty[$field] = $body[$field];
             }
@@ -185,7 +190,6 @@ final class MediaArchiveAdminController
             MediaArchiveUpdateValidator::validateArray($body, 'tags', 'tags must be an array of strings.'),
             MediaArchiveUpdateValidator::validateArray($body, 'metadata', 'metadata must be an object.'),
             MediaArchiveUpdateValidator::validateString($body, 'prompt', 'prompt must be a string.'),
-            MediaArchiveUpdateValidator::validateString($body, 'markdown_content', 'markdown_content must be a string.'),
             MediaArchiveUpdateValidator::validateBool($body, 'public_access_enabled', 'public_access_enabled must be a boolean.'),
         ];
         foreach ($messages as $message) {

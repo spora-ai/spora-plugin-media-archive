@@ -55,8 +55,11 @@ final class MediaArchiveUpdateValidator
     }
 
     /**
-     * Shared validator for `prompt` and `markdown_content`: both reject
-     * non-null non-string payloads.
+     * Shared validator for the nullable string fields on the patch
+     * surface (`prompt`): rejects non-null non-string payloads and
+     * accepts `null` (clears). The field name and error message are
+     * caller-supplied for the same reason as {@see validateArray} —
+     * the field surfaces in the response envelope.
      *
      * @param array<string, mixed> $body
      */

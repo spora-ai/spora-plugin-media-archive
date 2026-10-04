@@ -77,39 +77,17 @@ test('PATCH prompt is persisted', function (): void {
     expect($body['data']['prompt'])->toBe('updated');
 });
 
-test('PATCH markdown_content is persisted', function (): void {
+test('PATCH prompt can be cleared by sending null', function (): void {
     [, $service, $controller] = buildUpdateController();
     $asset = ingestSample($service, 1);
-    $req = Request::create("/api/v1/media/{$asset->id}", 'PATCH', content: json_encode(['markdown_content' => "# Hello\n\nWorld"]));
-    $req->headers->set('Content-Type', 'application/json');
-    $resp = $controller->update($asset->id, $req);
-    expect($resp->getStatusCode())->toBe(200);
-    $body = json_decode($resp->getContent(), true);
-    expect($body['data']['markdown_content'])->toBe("# Hello\n\nWorld");
-});
-
-test('PATCH markdown_content can be cleared by sending null', function (): void {
-    [, $service, $controller] = buildUpdateController();
-    $asset = ingestSample($service, 1);
-    $asset->markdown_content = 'pre-existing';
+    $asset->prompt = 'pre-existing';
     $asset->save();
-    $req = Request::create("/api/v1/media/{$asset->id}", 'PATCH', content: json_encode(['markdown_content' => null]));
+    $req = Request::create("/api/v1/media/{$asset->id}", 'PATCH', content: json_encode(['prompt' => null]));
     $req->headers->set('Content-Type', 'application/json');
     $resp = $controller->update($asset->id, $req);
     expect($resp->getStatusCode())->toBe(200);
     $body = json_decode($resp->getContent(), true);
-    expect($body['data']['markdown_content'])->toBeNull();
-});
-
-test('PATCH markdown_content rejects non-string non-null payloads with 400', function (): void {
-    [, $service, $controller] = buildUpdateController();
-    $asset = ingestSample($service, 1);
-    $req = Request::create("/api/v1/media/{$asset->id}", 'PATCH', content: json_encode(['markdown_content' => ['not', 'a', 'string']]));
-    $req->headers->set('Content-Type', 'application/json');
-    $resp = $controller->update($asset->id, $req);
-    expect($resp->getStatusCode())->toBe(400);
-    $body = json_decode($resp->getContent(), true);
-    expect($body['error']['message'])->toBe('markdown_content must be a string.');
+    expect($body['data']['prompt'])->toBeNull();
 });
 
 test('PATCH returns 403 when the asset is owned by a different non-admin user', function (): void {
@@ -340,6 +318,21 @@ test('update rejects non-string filename with 400', function (): void {
     expect($resp->getStatusCode())->toBe(400);
 });
 
+test('update rejects a filename longer than 255 characters with 400', function (): void {
+    [, $service, $controller] = buildUpdateController();
+    $asset = ingestSample($service, 1);
+    $req = Request::create(
+        "/api/v1/media/{$asset->id}",
+        'PATCH',
+        content: json_encode(['filename' => str_repeat('a', 256)]),
+    );
+    $req->headers->set('Content-Type', 'application/json');
+    $resp = $controller->update($asset->id, $req);
+    expect($resp->getStatusCode())->toBe(400);
+    $body = json_decode($resp->getContent(), true);
+    expect($body['error']['message'])->toBe('filename must be a string up to 255 characters.');
+});
+
 test('update rejects non-array tags with 400', function (): void {
     [, $service, $controller] = buildUpdateController();
     $asset = ingestSample($service, 1);
@@ -351,6 +344,36 @@ test('update rejects non-array tags with 400', function (): void {
     $req->headers->set('Content-Type', 'application/json');
     $resp = $controller->update($asset->id, $req);
     expect($resp->getStatusCode())->toBe(400);
+});
+
+test('update rejects non-array metadata with 400', function (): void {
+    [, $service, $controller] = buildUpdateController();
+    $asset = ingestSample($service, 1);
+    $req = Request::create(
+        "/api/v1/media/{$asset->id}",
+        'PATCH',
+        content: json_encode(['metadata' => 'not-an-array']),
+    );
+    $req->headers->set('Content-Type', 'application/json');
+    $resp = $controller->update($asset->id, $req);
+    expect($resp->getStatusCode())->toBe(400);
+    $body = json_decode($resp->getContent(), true);
+    expect($body['error']['message'])->toBe('metadata must be an object.');
+});
+
+test('update rejects non-string prompt with 400', function (): void {
+    [, $service, $controller] = buildUpdateController();
+    $asset = ingestSample($service, 1);
+    $req = Request::create(
+        "/api/v1/media/{$asset->id}",
+        'PATCH',
+        content: json_encode(['prompt' => ['not', 'a', 'string']]),
+    );
+    $req->headers->set('Content-Type', 'application/json');
+    $resp = $controller->update($asset->id, $req);
+    expect($resp->getStatusCode())->toBe(400);
+    $body = json_decode($resp->getContent(), true);
+    expect($body['error']['message'])->toBe('prompt must be a string.');
 });
 
 test('update rejects non-bool public_access_enabled with 400', function (): void {
@@ -388,6 +411,69 @@ test('update returns 404 for unknown id', function (): void {
     $req->headers->set('Content-Type', 'application/json');
     $resp = $controller->update('00000000-0000-0000-0000-000000000000', $req);
     expect($resp->getStatusCode())->toBe(404);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// update() — the dropped `markdown_content` key
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A client that still PATCHes `markdown_content` — an older media-archive
+ * frontend bundle, or anything written against the pre-derivative
+ * contract — gets a silent no-op, not a 400 and not a write.
+ *
+ * `extractUpdatableFields()` is an allowlist, so the key never reaches
+ * `fill()`; dropping the column in spora-core therefore cannot turn
+ * this into a "column not found" failure. The rest of the body is
+ * still applied, which is what distinguishes "ignored unknown field"
+ * from "request rejected".
+ */
+test('PATCH ignores a stale markdown_content key and still applies the rest of the body', function (): void {
+    [, $service, $controller] = buildUpdateController();
+    $asset = ingestSample($service, 1);
+    // Snapshot rather than assume: on a core version that still has the
+    // column, ingestion left the converter's output on the row. Once the
+    // column is gone the key is simply absent and the comparison is
+    // trivially true — which is the intended end state.
+    $before = \Spora\Models\MediaAsset::query()->findOrFail($asset->id)->getAttributes();
+    $beforeMarkdown = $before['markdown_content'] ?? null;
+
+    $req = Request::create(
+        "/api/v1/media/{$asset->id}",
+        'PATCH',
+        content: json_encode([
+            'markdown_content' => "# stale client\n\npayload",
+            'filename' => 'still-applied.txt',
+        ]),
+    );
+    $req->headers->set('Content-Type', 'application/json');
+    $resp = $controller->update($asset->id, $req);
+
+    expect($resp->getStatusCode())->toBe(200);
+    $body = json_decode($resp->getContent(), true);
+    expect($body['data']['filename'])->toBe('still-applied.txt');
+
+    $after = \Spora\Models\MediaAsset::query()->findOrFail($asset->id)->getAttributes();
+    expect($after['markdown_content'] ?? null)->toBe($beforeMarkdown);
+});
+
+/**
+ * The stale key is not type-checked either. `validateString()` used to
+ * reject a non-string `markdown_content` with 400; a stale client that
+ * sends one now gets the same 200 as any other unknown field, because
+ * the field is gone from the contract rather than merely deprecated.
+ */
+test('PATCH does not validate a stale markdown_content key', function (): void {
+    [, $service, $controller] = buildUpdateController();
+    $asset = ingestSample($service, 1);
+    $req = Request::create(
+        "/api/v1/media/{$asset->id}",
+        'PATCH',
+        content: json_encode(['markdown_content' => ['not', 'a', 'string']]),
+    );
+    $req->headers->set('Content-Type', 'application/json');
+    $resp = $controller->update($asset->id, $req);
+    expect($resp->getStatusCode())->toBe(200);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
