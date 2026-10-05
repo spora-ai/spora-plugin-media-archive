@@ -157,7 +157,20 @@ final class MediaArchiveAdminController
     private function extractUpdatableFields(array $body): array
     {
         $dirty = [];
-        foreach (['filename', 'tags', 'metadata', 'prompt', 'markdown_content'] as $field) {
+        // `markdown_content` left this allowlist when document extraction
+        // moved to `md` derivatives in spora-core. The list stays an
+        // allowlist, and it is the only gate on the write path: a key it
+        // does not name never reaches `fill()`, so a stale client that
+        // still PATCHes it gets a silent no-op, and the rest of the body
+        // still applies.
+        //
+        // That is also what makes the merge order safe. The key can be
+        // dropped here first — against a core that still has the column it
+        // is a silent capability loss, not a break. The direction that does
+        // break is the reverse: core dropping the column while this
+        // allowlist still names the key puts a write to a missing column on
+        // every PATCH that carries one. So core's cut must not land first.
+        foreach (['filename', 'tags', 'metadata', 'prompt'] as $field) {
             if (array_key_exists($field, $body)) {
                 $dirty[$field] = $body[$field];
             }
@@ -185,7 +198,6 @@ final class MediaArchiveAdminController
             MediaArchiveUpdateValidator::validateArray($body, 'tags', 'tags must be an array of strings.'),
             MediaArchiveUpdateValidator::validateArray($body, 'metadata', 'metadata must be an object.'),
             MediaArchiveUpdateValidator::validateString($body, 'prompt', 'prompt must be a string.'),
-            MediaArchiveUpdateValidator::validateString($body, 'markdown_content', 'markdown_content must be a string.'),
             MediaArchiveUpdateValidator::validateBool($body, 'public_access_enabled', 'public_access_enabled must be a boolean.'),
         ];
         foreach ($messages as $message) {
