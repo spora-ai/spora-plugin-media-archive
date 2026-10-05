@@ -157,11 +157,13 @@ final class MediaArchiveAdminController
     private function extractUpdatableFields(array $body): array
     {
         $dirty = [];
-        // `markdown_content` left this allowlist when document
-        // extraction moved to `md` derivatives in spora-core. The list
-        // stays an allowlist, so a stale client that still PATCHes the
-        // key gets a silent no-op rather than a write to a column that
-        // no longer exists.
+        // `markdown_content` left this allowlist when document extraction
+        // moved to `md` derivatives in spora-core. The list stays an
+        // allowlist, so a stale client that still PATCHes the key gets a
+        // silent no-op rather than a write to a column that no longer
+        // exists. That is also why the core column drop and this one have
+        // to land together: alone, this side breaks the write path, and
+        // the key cannot be dropped from both gates until the column is.
         foreach (['filename', 'tags', 'metadata', 'prompt'] as $field) {
             if (array_key_exists($field, $body)) {
                 $dirty[$field] = $body[$field];

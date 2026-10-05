@@ -413,10 +413,6 @@ test('update returns 404 for unknown id', function (): void {
     expect($resp->getStatusCode())->toBe(404);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// update() — the dropped `markdown_content` key
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
  * A client that still PATCHes `markdown_content` — an older media-archive
  * frontend bundle, or anything written against the pre-derivative

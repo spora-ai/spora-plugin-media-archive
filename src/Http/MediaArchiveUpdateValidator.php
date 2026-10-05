@@ -55,11 +55,15 @@ final class MediaArchiveUpdateValidator
     }
 
     /**
-     * Shared validator for the nullable string fields on the patch
-     * surface (`prompt`): rejects non-null non-string payloads and
-     * accepts `null` (clears). The field name and error message are
-     * caller-supplied for the same reason as {@see validateArray} —
-     * the field surfaces in the response envelope.
+     * Nullable string field on the patch surface (`prompt`): rejects
+     * non-null non-string payloads and accepts `null` (clears). The error
+     * message is caller-supplied for the same reason as
+     * {@see validateArray} — the field name surfaces in the response
+     * envelope.
+     *
+     * A field that is no longer on the contract is not routed here at all,
+     * which is why an unknown key is a silent no-op rather than a 400: this
+     * only runs for names the caller still recognises.
      *
      * @param array<string, mixed> $body
      */
