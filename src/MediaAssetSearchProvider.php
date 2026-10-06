@@ -82,6 +82,43 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
     private const MAX_HITS = 20;
 
     /**
+     * The columns this provider reads, and the only ones it fetches.
+     *
+     * Everything a hit renders — `id` for the dedup key, the href and the
+     * label fallback, then `filename`, `prompt`, `media_type`, `mime_type`
+     * — plus `created_at`, which the tiebreak in {@see self::query()}
+     * orders by. Left out on purpose: the columns that say what the bytes
+     * are (`payload`, `asset_url`, `asset_token`, `public_access_token`,
+     * `metadata`, `source_url`), and the columns only the SQL needs
+     * (`tags`, `transcript`, and the scope columns). A `WHERE` and a
+     * `CASE` read those in the engine, where looking at them costs
+     * nothing.
+     *
+     * `payload` is why this list exists. It is a MEDIUMBLOB with a 16 MiB
+     * ceiling (core migration 0064), and on the default `auto` asset store
+     * anything over 1 MiB is stored there — so an unselected `->get()`
+     * pulls up to twenty blobs and holds them for the length of a
+     * debounced keystroke on shared hosting. {@see self::SUB_LABEL_LIMIT}
+     * is the same objection two orders of magnitude smaller; the blob was
+     * the part it missed.
+     *
+     * `tests/Unit/MediaAssetSearchProviderTest.php` reconciles this list
+     * against the properties the provider actually reads, so a model read
+     * added without a column here fails the suite instead of quietly
+     * rendering a null.
+     *
+     * @var list<string>
+     */
+    private const SELECTED_COLUMNS = [
+        'id',
+        'filename',
+        'prompt',
+        'media_type',
+        'mime_type',
+        'created_at',
+    ];
+
+    /**
      * Ranking tiers, best first. The number IS the rank and the order of
      * this list IS the ranking, so a new tier has to be inserted where it
      * belongs rather than appended.
@@ -209,6 +246,12 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
     private function query(array $principalIds, string $needle): Builder
     {
         $builder = MediaAsset::query();
+
+        // The select list goes on before the predicates, not because the
+        // order matters to the builder but because it is the statement
+        // that decides what crosses the wire: everything below this line
+        // only ever needs the columns in `SELECTED_COLUMNS`.
+        $builder->select(self::SELECTED_COLUMNS);
 
         // Mirrors `applyPrincipalIdScope()` exactly: the indexed column
         // is the fast path, and the agent join is the back-compat path

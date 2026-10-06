@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Carbon\Carbon;
 use Illuminate\Database\Capsule\Manager as Capsule;
+use ReflectionClass;
 use Spora\Models\MediaAsset;
 use Spora\Plugins\MediaArchive\MediaAssetSearchProvider;
 use Spora\Search\SearchContext;
@@ -109,6 +110,122 @@ function search(string $query, array $principalIds = [1]): array
 function hitIds(array $hits): array
 {
     return array_map(static fn(SearchHit $hit): string => $hit->id, $hits);
+}
+
+/**
+ * The provider's select list, read off the class rather than restated here.
+ *
+ * Reflection rather than a duplicated literal so this file cannot drift from
+ * the constant it is supposed to hold in place: the reconciliation below is
+ * only worth anything if it reads what the provider actually ships.
+ *
+ * @return list<string>
+ */
+function providerSelectedColumns(): array
+{
+    $constant = (new ReflectionClass(MediaAssetSearchProvider::class))->getReflectionConstant('SELECTED_COLUMNS');
+
+    expect($constant)->not->toBeNull();
+
+    /** @var list<string> $columns */
+    $columns = $constant->getValue();
+
+    return $columns;
+}
+
+/**
+ * Every `->column` property read in the provider's source, narrowed to the
+ * names that are actually columns on {@see MediaAsset}.
+ *
+ * Tokenised rather than grepped so a property fetch and a method call are not
+ * confused — `$builder->where(...)` and `$this->type()` are calls, while
+ * `$asset->filename` is a read that would come back `null` if the select list
+ * stopped naming the column. Intersecting with the model's own column list is
+ * what keeps `$hit->`-style reads on other objects out of the result, so the
+ * assertion stays true without the provider having to keep a comment in sync.
+ *
+ * @return list<string>
+ */
+function providerModelReads(): array
+{
+    $source = file_get_contents(BASE_PATH . '/src/MediaAssetSearchProvider.php');
+    expect($source)->toBeString();
+
+    /** @var array<int, array{0: int, 1: string, 2: int}|string> $tokens */
+    $tokens = token_get_all($source);
+
+    $reads = [];
+    foreach ($tokens as $index => $token) {
+        if (!is_array($token) || $token[0] !== T_OBJECT_OPERATOR) {
+            continue;
+        }
+
+        $name = $tokens[$index + 1] ?? null;
+        if (!is_array($name) || $name[0] !== T_STRING) {
+            continue;
+        }
+
+        $after = $tokens[$index + 2] ?? null;
+        if (is_array($after) && $after[0] === T_WHITESPACE) {
+            $after = $tokens[$index + 3] ?? null;
+        }
+        // `token_get_all` returns a single-character token as a plain string,
+        // so the `(` of a call is `'('` and never an array to index into.
+        if ($after === '(') {
+            continue;
+        }
+
+        if (in_array($name[1], mediaAssetColumns(), true)) {
+            $reads[$name[1]] = true;
+        }
+    }
+
+    return array_keys($reads);
+}
+
+/**
+ * What may appear in the select list: the model's own columns, plus the two
+ * timestamps Eloquent manages and — pointedly — does not list.
+ *
+ * @return list<string>
+ */
+function mediaAssetColumns(): array
+{
+    return [...MediaAsset::COLUMNS, 'created_at', 'updated_at'];
+}
+
+/**
+ * The `media_assets` SELECTs a callable produces, for assertions about what
+ * the provider asked the database for.
+ *
+ * Logged rather than inferred from the builder so the test survives the
+ * select list being dropped entirely — the failure a source-level check
+ * cannot see, because the constant can still be there, unused.
+ *
+ * @param callable(): void $run
+ * @return list<string>
+ */
+function mediaAssetSelects(callable $run): array
+{
+    $connection = Capsule::connection();
+    $connection->enableQueryLog();
+
+    try {
+        $run();
+        $log = $connection->getQueryLog();
+    } finally {
+        $connection->disableQueryLog();
+    }
+
+    $statements = [];
+    foreach ($log as $entry) {
+        // Quoting differs per engine; the table name does not.
+        if (preg_match('/from ["`]media_assets["`]/', $entry['query']) === 1) {
+            $statements[] = $entry['query'];
+        }
+    }
+
+    return $statements;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -481,4 +598,80 @@ test('the cap is applied after ranking, not before', function (): void {
 
     expect(count($hits))->toBe(20);
     expect($hits[0]->id)->toBe($named->id);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// What crosses the wire
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('every model property the provider reads is in the select list', function (): void {
+    // The guard that outlives this PR. Reading a column that the select list
+    // does not name does not throw — Eloquent hands back `null` — so a hit
+    // silently loses its label, its sublabel or its badge. The reads are
+    // recovered from the provider's own source, so adding a model read
+    // without adding the column fails here.
+    $reads = providerModelReads();
+
+    // Nothing scanned would make the loop below vacuous.
+    expect($reads)->not->toBeEmpty();
+
+    foreach ($reads as $read) {
+        expect(providerSelectedColumns())->toContain($read);
+    }
+});
+
+test('every column in the select list is a column the table actually has', function (): void {
+    // The other direction: a typo'd or renamed column is a SQL error on the
+    // first keystroke of the first search, with nothing else in the suite
+    // pointing at it.
+    foreach (providerSelectedColumns() as $column) {
+        expect(mediaAssetColumns())->toContain($column);
+    }
+});
+
+test('the query never fetches the payload blob', function (): void {
+    // `payload` is a MEDIUMBLOB with a 16 MiB ceiling (core migration 0064),
+    // and on the default `auto` store everything over 1 MiB lives there. An
+    // unselected `->get()` would move twenty of them — and hold them — on
+    // every debounced keystroke. 512 KiB here is one row's worth of proof;
+    // the assertion is about the statement, not the row.
+    createAsset([
+        'principal_id' => 1,
+        'filename'     => 'bulky.pdf',
+        'payload'      => str_repeat('x', 512 * 1024),
+    ]);
+
+    $statements = mediaAssetSelects(static function (): void {
+        search('bulky');
+    });
+
+    expect($statements)->not->toBeEmpty();
+
+    foreach ($statements as $statement) {
+        foreach (['id', 'filename', 'prompt', 'media_type', 'mime_type'] as $rendered) {
+            expect($statement)->toContain($rendered);
+        }
+        // The bytes, and the columns that name or expose them. Nothing in a
+        // palette row needs any of these.
+        foreach (['payload', 'asset_url', 'asset_token', 'public_access_token', 'metadata', 'source_url'] as $heavy) {
+            expect($statement)->not->toContain($heavy);
+        }
+    }
+});
+
+test('the text-only columns are filtered on without being fetched back', function (): void {
+    // `tags` and `transcript` are matched against in SQL, which is the point:
+    // pulling them back would hydrate a JSON-decoded tag array and a whole
+    // transcript per hit to render neither. They stay out of the select list
+    // and matching is unaffected.
+    $tagged      = createAsset(['principal_id' => 1, 'filename' => 'tagged.png', 'tags' => ['volcano']]);
+    $transcribed = createAsset(['principal_id' => 1, 'filename' => 'said.m4a', 'transcript' => 'we passed the volcano']);
+
+    $statements = mediaAssetSelects(static function (): void {
+        search('volcano');
+    });
+
+    expect($statements)->not->toBeEmpty();
+    expect(providerSelectedColumns())->not->toContain('tags', 'transcript');
+    expect(hitIds(search('volcano')))->toContain($tagged->id, $transcribed->id);
 });
