@@ -17,14 +17,18 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # `MediaAssetSearchProvider` implements `Spora\Search\SearchProviderInterface`
-  # and reads columns only the newer core has — `SearchProviderInterface`
-  # landed in core #279 and `transcript` in #80, both after the newest tag
-  # (v0.29.0). composer.json therefore resolves spora-core through a `path`
-  # repository, with the version pinned in `options.versions` so the
-  # constraint is stable whichever ref is checked out. Once core tags the
-  # release carrying both, this entry is deleted and spora-core resolves
-  # from Packagist like every other plugin.
+  # `MediaAssetSearchProvider` implements `Spora\Search\SearchProviderInterface`,
+  # which is newer than the newest tag (v0.29.0): `git ls-tree -r v0.29.0
+  # app/Search/` is empty, so no tagged core carries it and composer.json
+  # cannot resolve spora-core from Packagist. `transcript` is NOT one of the
+  # reasons — it landed in core #238 (44eb5f73) and `git tag --contains
+  # 44eb5f73` lists v0.24.0 through v0.29.0, so it ships in v0.29.0; #80 is
+  # the migration filename, not the PR. composer.json therefore resolves
+  # spora-core through a `path` repository, with the version pinned in
+  # `options.versions` so the constraint is stable whichever ref is checked
+  # out. Once core tags the release carrying `SearchProviderInterface`, this
+  # entry is deleted and spora-core resolves from Packagist like every other
+  # plugin.
   #
   # `main` is the ref the merged results live on — a branch that no longer
   # exists is what took spora-plugin-word's `test` (and with it `sonar`)
