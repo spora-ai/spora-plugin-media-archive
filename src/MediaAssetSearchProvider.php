@@ -118,6 +118,14 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
     private const LIKE_ESCAPE = " ESCAPE '!' ";
 
     /**
+     * The `THEN <rank>` half of a CASE arm, named because {@see self::rankSql()}
+     * repeats it once per tier and the repeat is exactly what makes an arm
+     * hard to re-read: the rank constants carry the ranking, this carries the
+     * grammar, and mixing them in one literal hides that split.
+     */
+    private const THEN = ' THEN ';
+
+    /**
      * A prompt is a paragraph; a palette row is one line. The host UI
      * truncates visually, but sending 4 KB of prompt text per hit to
      * render one clipped line is waste on every keystroke of a debounced
@@ -288,10 +296,10 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
     {
         return 'CASE'
             . ' WHEN lower(media_assets.filename) = ? THEN ' . self::RANK_FILENAME_EXACT
-            . ' WHEN lower(media_assets.filename) LIKE ?' . self::LIKE_ESCAPE . ' THEN ' . self::RANK_FILENAME_PREFIX
-            . ' WHEN lower(media_assets.filename) LIKE ?' . self::LIKE_ESCAPE . ' THEN ' . self::RANK_FILENAME_SUBSTRING
-            . ' WHEN lower(media_assets.prompt) LIKE ?' . self::LIKE_ESCAPE . ' THEN ' . self::RANK_PROMPT
-            . ' WHEN lower(media_assets.tags) LIKE ?' . self::LIKE_ESCAPE . ' THEN ' . self::RANK_TAGS
+            . ' WHEN lower(media_assets.filename) LIKE ?' . self::LIKE_ESCAPE . self::THEN . self::RANK_FILENAME_PREFIX
+            . ' WHEN lower(media_assets.filename) LIKE ?' . self::LIKE_ESCAPE . self::THEN . self::RANK_FILENAME_SUBSTRING
+            . ' WHEN lower(media_assets.prompt) LIKE ?' . self::LIKE_ESCAPE . self::THEN . self::RANK_PROMPT
+            . ' WHEN lower(media_assets.tags) LIKE ?' . self::LIKE_ESCAPE . self::THEN . self::RANK_TAGS
             . ' ELSE ' . self::RANK_TRANSCRIPT
             . ' END ASC';
     }
@@ -379,7 +387,10 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
     private function badgeFor(MediaAsset $asset): ?string
     {
         $mediaType = trim((string) $asset->media_type);
+        if ($mediaType !== '') {
+            return $mediaType;
+        }
 
-        return $mediaType !== '' ? $mediaType : ($asset->mime_type !== null ? $asset->mime_type : null);
+        return $asset->mime_type;
     }
 }
