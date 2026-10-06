@@ -13,7 +13,7 @@ composer require spora-ai/spora-plugin-media-archive-frontend
 
 Both packages are required: the PHP package contributes the admin-panel metadata (`MediaArchiveApp` → `VueAppInterface`), and the frontend package ships the Vue IIFE bundle that the host SPA lazy-loads at runtime.
 
-Requires `spora-ai/spora-core` ≥ 0.20.0 (ships `MediaDerivativeService` and the two-arg `MediaAssetSerializer` used to surface persisted derivatives on the detail page; versions prior to 0.20.0 leave the VersionsStrip empty on reload).
+Requires `spora-ai/spora-core` ≥ 0.30.0, which is where `Spora\Search\SearchProviderInterface` landed (core #279) — the plugin's search provider implements it, and 0.30.0 is also the first version whose ingest pipeline the plugin's tests are written against.
 
 ## What it does
 
@@ -23,8 +23,9 @@ Requires `spora-ai/spora-core` ≥ 0.20.0 (ships `MediaDerivativeService` and th
 - Click-through detail drawer with metadata (dimensions, duration, mime type, source URL).
 - A `derivatives` strip below the asset row (format chip + producer + asset URL). Populated from the `media_derivatives` join table; the controller reads it via `MediaDerivativeService::listFor()` so chips survive a hard reload, not just the in-memory splice on derivative production.
 - One-click download via the existing `AssetController::show()` route.
+- Palette search (⌘K): `MediaAssetSearchProvider` returns hits under the `media-archive` section bucket, matched on `filename` and on the free-text fields (`prompt`, `transcript`, `tags`) so an asset is findable by what it contains and not only by what it is called. Filename matches outrank body matches; the tail of a long prompt is truncated for the one-line row. Scoped strictly to the caller's `SearchContext` principal ids, so a hit can never name an asset another principal owns. See the class docblock for the scoping rule and the row shape it cannot reach.
 
-The plugin itself adds no tools, drivers, recipes, or migrations — it is purely presentational.
+The plugin itself adds no tools, drivers, recipes, or migrations.
 
 ## Companion plugins
 

@@ -16,14 +16,9 @@ use Spora\Services\LocalAssetStore;
 use Spora\Services\MediaArchive\DerivativeOutput;
 use Spora\Services\MediaArchive\MediaArchiveService;
 use Spora\Services\MediaArchive\MediaAssetSerializer;
-use Spora\Services\MediaArchive\MediaConverterDiscovery;
 use Spora\Services\MediaArchive\MediaDerivativeService;
 use Spora\Services\MediaArchive\MediaIngestRequest;
 use Symfony\Component\HttpFoundation\Request;
-
-afterEach(function (): void {
-    MediaConverterDiscovery::reset();
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // update() — PATCH /api/v1/media/{id}
