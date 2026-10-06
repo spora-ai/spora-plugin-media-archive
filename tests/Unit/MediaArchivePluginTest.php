@@ -13,6 +13,8 @@ use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\MediaArchive\Http\MediaArchiveAdminController;
 use Spora\Plugins\MediaArchive\MediaArchiveApp;
 use Spora\Plugins\MediaArchive\MediaArchivePlugin;
+use Spora\Plugins\MediaArchive\MediaAssetSearchProvider;
+use Spora\Search\SearchProviderInterface;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
@@ -52,6 +54,36 @@ it('contributes no tools or migrations', function (): void {
     expect($plugin->tools())->toBe([]);
     expect($plugin->migrationsPath())->toBeNull();
     expect($plugin->schemaVersion())->toBe(0);
+});
+
+it('contributes the asset search provider', function (): void {
+    // The plugin's only search hook. `PluginLoader::searchProviderClasses()`
+    // merges this into the container's provider list, so returning []
+    // here is what makes the whole archive invisible in the host palette
+    // while every REST route keeps working — the plugin would look healthy.
+    $plugin = new MediaArchivePlugin();
+
+    expect($plugin->searchProviders())->toBe([MediaAssetSearchProvider::class]);
+    expect(new MediaAssetSearchProvider())->toBeInstanceOf(SearchProviderInterface::class);
+});
+
+it('autowires MediaAssetSearchProvider with no container definition', function (): void {
+    // Unlike MediaArchiveAdminController, the provider takes no constructor
+    // arguments, so PHP-DI resolves it on the autowiring path and no
+    // `\DI\autowire()` binding is owed. Asserted rather than assumed: the
+    // registry does `$container->get($class)` per provider class, so a
+    // constructor dependency added without a matching binding would fail
+    // here rather than silently dropping the section from the palette.
+    $builder = new ContainerBuilder();
+    $builder->useAutowiring(true);
+
+    $dispatcher = new EventDispatcher();
+    $dispatcher->addSubscriber(new MediaArchivePlugin());
+    $dispatcher->dispatch(new ContainerBuildingEvent($builder));
+
+    $container = $builder->build();
+
+    expect($container->get(MediaAssetSearchProvider::class))->toBeInstanceOf(MediaAssetSearchProvider::class);
 });
 
 it('subscribes to the two lifecycle events it needs', function (): void {

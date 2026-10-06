@@ -115,4 +115,28 @@ final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriber
             MediaArchiveApp::class,
         ];
     }
+
+    /**
+     * Contribute the archive's rows to the host ⌘K palette, so an asset is
+     * findable by what it contains rather than only by browsing the grid.
+     *
+     * Distinct from {@see self::apps()}: that makes the panel *reachable*,
+     * this makes its contents *findable*. The provider returns hits that
+     * link into that panel, which is why the two have to agree on the
+     * asset path shape.
+     *
+     * No DI definition in {@see self::onContainerBuilding()} is needed for
+     * it: `SearchProviderRegistry` resolves each provider class straight
+     * from the container, and PHP-DI autowires a class whose constructor
+     * takes nothing — which this one deliberately does, since it needs
+     * nothing but the model it queries.
+     *
+     * @return array<int, class-string<\Spora\Search\SearchProviderInterface>>
+     */
+    public function searchProviders(): array
+    {
+        return [
+            MediaAssetSearchProvider::class,
+        ];
+    }
 }
