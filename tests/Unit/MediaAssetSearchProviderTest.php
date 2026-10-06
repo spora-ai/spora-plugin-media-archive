@@ -581,6 +581,31 @@ test('hits are capped', function (): void {
     expect(hitIds($hits))->toBe(hitIds(search('cap-')));
 });
 
+test('the cap is global across principals, so a large group can hide a small one', function (): void {
+    // The documented trade, pinned rather than left as prose: the cap applies
+    // to the union of every principal in the context, so twenty better-ranked
+    // rows under one principal leave no slot for another. Twenty-five prefix
+    // matches beat the one substring match on rank alone, which keeps the
+    // outcome a statement about the cap rather than about the tiebreak.
+    for ($i = 0; $i < 25; $i++) {
+        createAsset([
+            'principal_id' => 1,
+            'filename'     => sprintf('starve-%02d.png', $i),
+        ]);
+    }
+    $small = createAsset(['principal_id' => 2, 'filename' => 'a-note-about-starve.png']);
+
+    $hits = search('starve', [1, 2]);
+
+    expect(count($hits))->toBe(20);
+    expect(hitIds($hits))->not->toContain($small->id);
+    // Nothing wrong with the small principal's row — it is simply outranked
+    // and outnumbered, which is the whole of the claim. And it is findable
+    // the moment the crowded principal is out of the context.
+    expect(MediaAsset::query()->find($small->id))->not->toBeNull();
+    expect(hitIds(search('starve', [2])))->toBe([$small->id]);
+});
+
 test('the cap is applied after ranking, not before', function (): void {
     // 30 body matches, then one filename match created last. A cap applied
     // before ranking would return 20 body matches and drop the file the

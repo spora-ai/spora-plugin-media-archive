@@ -74,10 +74,27 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
     private const TYPE = 'media-archive';
 
     /**
-     * Matches core's `SkillSearchProvider`: the palette renders one bounded
-     * list, and a media archive is a document set, not a fixed-size
-     * affordance. The cap is a UX bound, not a security one — scope is
-     * already applied above it.
+     * A UX bound, not a security one — the scope predicate is applied
+     * below it in {@see self::query()}, not above it. The palette renders
+     * one bounded list, and a media archive is a document set, not a
+     * fixed-size affordance: a busy group's archive holds far more than
+     * twenty documents, so the bound has to be the host's rather than the
+     * archive's.
+     *
+     * The cap is GLOBAL across the principals in the context, not
+     * per-principal, so twenty exact-filename matches under one principal
+     * fill every slot and a second principal's one matching asset is not
+     * offered at all. That is a deliberate trade rather than an oversight,
+     * because the fair partition is not available on this query: it takes
+     * either a round trip per principal (one per debounced keystroke) or a
+     * `ROW_NUMBER() OVER (PARTITION BY …)` window, and the window version
+     * still piles every legacy agent-scoped row into one bucket under its
+     * NULL `principal_id` — the same starvation wearing a partition. The
+     * honest place to say "I mean that one group" is the archive's own
+     * scope chips, not a palette row.
+     *
+     * Pinned by `tests/Unit/MediaAssetSearchProviderTest.php`, so changing
+     * it means changing the test that names this behaviour too.
      */
     private const MAX_HITS = 20;
 
