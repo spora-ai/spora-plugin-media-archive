@@ -4,6 +4,15 @@ name: CI
 # attacks via tag reassignment. Run `gh api repos/OWNER/REPO/git/refs/tags/vN`
 # to look up the current SHA when upgrading. Review SonarCloud hotspots
 # (rule githubactions:S7637) periodically.
+#
+# Every job installs with `composer update spora-ai/spora-core
+# --with-all-dependencies`, not `composer install`. While composer.json carried
+# a temporary `path` repository pointing at a sibling core checkout, that entry
+# pinned the package to 0.30.0 in `options.versions` regardless of which ref sat
+# in it — so a green run proved only that the plugin worked against an arbitrary
+# core working tree, not against the declared floor. Resolving `>=0.30.0 <2.0.0`
+# against the published release is what makes a green run mean the declared
+# constraint is actually satisfiable.
 
 on:
   push:
@@ -15,33 +24,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  # `MediaAssetSearchProvider` implements `Spora\Search\SearchProviderInterface`,
-  # which is newer than the newest tag (v0.29.0): `git ls-tree -r v0.29.0
-  # app/Search/` is empty, so no tagged core carries it and composer.json
-  # cannot resolve spora-core from Packagist. `transcript` is NOT one of the
-  # reasons — it landed in core #238 (44eb5f73) and `git tag --contains
-  # 44eb5f73` lists v0.24.0 through v0.29.0, so it ships in v0.29.0; #80 is
-  # the migration filename, not the PR. composer.json therefore resolves
-  # spora-core through a `path` repository, with the version pinned in
-  # `options.versions` so the constraint is stable whichever ref is checked
-  # out. Once core tags the release carrying `SearchProviderInterface`, this
-  # entry is deleted and spora-core resolves from Packagist like every other
-  # plugin.
-  #
-  # `main` is the ref the merged results live on — a branch that no longer
-  # exists is what took spora-plugin-word's `test` (and with it `sonar`)
-  # down once already. A SHA pin would be tighter but would need a manual
-  # bump for every core fix this plugin is meant to inherit.
-  #
-  # `actions/checkout`'s `path:` is workspace-relative, so the core checkout
-  # lands inside this repo's workspace while the path repository is declared
-  # as `../spora-core` — a sibling, which is what local development has. Every
-  # job that runs `composer install` symlinks the checkout to the sibling
-  # location first; without it all of them fail with
-  # `Source path "../spora-core" is not found`.
-  SPORA_CORE_REF: main
 
 jobs:
   test:
@@ -62,18 +44,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Checkout spora-core (path repository)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: spora-ai/spora-core
-          ref: ${{ env.SPORA_CORE_REF }}
-          path: spora-core
-
-      - name: Link spora-core to the sibling path the lock expects
-        run: ln -sfn "$GITHUB_WORKSPACE/spora-core" "$GITHUB_WORKSPACE/../spora-core"
-
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run Pest
         run: ./vendor/bin/pest
@@ -91,18 +63,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Checkout spora-core (path repository)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: spora-ai/spora-core
-          ref: ${{ env.SPORA_CORE_REF }}
-          path: spora-core
-
-      - name: Link spora-core to the sibling path the lock expects
-        run: ln -sfn "$GITHUB_WORKSPACE/spora-core" "$GITHUB_WORKSPACE/../spora-core"
-
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run PHPStan
         # `composer analyse` wraps this with a 512M memory limit; calling
@@ -123,18 +85,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Checkout spora-core (path repository)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: spora-ai/spora-core
-          ref: ${{ env.SPORA_CORE_REF }}
-          path: spora-core
-
-      - name: Link spora-core to the sibling path the lock expects
-        run: ln -sfn "$GITHUB_WORKSPACE/spora-core" "$GITHUB_WORKSPACE/../spora-core"
-
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Check code style
         # Dry-run (--dry-run) reports violations without rewriting files.
@@ -159,18 +111,8 @@ jobs:
           coverage: pcov
           tools: composer
 
-      - name: Checkout spora-core (path repository)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: spora-ai/spora-core
-          ref: ${{ env.SPORA_CORE_REF }}
-          path: spora-core
-
-      - name: Link spora-core to the sibling path the lock expects
-        run: ln -sfn "$GITHUB_WORKSPACE/spora-core" "$GITHUB_WORKSPACE/../spora-core"
-
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run Pest with coverage
         # Pest 4 emits a WARN ("No filter is configured, code coverage will
