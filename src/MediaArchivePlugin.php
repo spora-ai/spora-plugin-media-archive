@@ -139,4 +139,30 @@ final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriber
             MediaAssetSearchProvider::class,
         ];
     }
+
+    /**
+     * Translation catalogues this plugin ships, declared through
+     * {@see \Spora\Plugins\PluginInterface::translationsPaths()}.
+     *
+     * Keys are the English source text — `de.json` reads
+     * `{"Media Archive": "Medienarchiv"}`, not `{"app": "…"}`. That is
+     * what makes the host's `i18n:check` able to fail when a string is
+     * edited without being re-translated: the key changes and the old
+     * entry orphans.
+     *
+     * **Only operator copy belongs in here.** This plugin ships no tool
+     * and declares no setting, so the admin app's `displayName()` and
+     * `description()` are the whole of it.
+     *
+     * Requires `spora-core >= 0.31.0` at runtime; older versions fail to
+     * resolve the method when the loader is strict.
+     *
+     * @return string[]
+     */
+    public function translationsPaths(): array
+    {
+        return [
+            __DIR__ . '/../locales',
+        ];
+    }
 }
