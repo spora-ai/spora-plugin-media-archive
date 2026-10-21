@@ -13,4 +13,5 @@
 /.worktrees/
 /tmp/
 /public/
+/frontend/
 .phpstan-cache/
