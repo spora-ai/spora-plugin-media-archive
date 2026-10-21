@@ -18,21 +18,15 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Plugin-owned admin REST surface for the Media Archive rows that the
- * operator dashboard edits (single-asset detail, PATCH metadata, DELETE,
- * and rotating the public-access token). The list endpoint stays in
- * {@see \Spora\Http\MediaArchiveController::index} because the composer
- * + upload UI also call it; the four routes below move here so the
- * plugin owns its CRUD end-to-end, mirroring the `spora-plugin-memories`
- * pattern.
+ * operator dashboard edits: single-asset detail, PATCH metadata, DELETE and
+ * rotating the public-access token. The list endpoint stays in
+ * {@see \Spora\Http\MediaArchiveController::index} because the composer and
+ * upload UI call it too.
  *
  * Auth is enforced by the route's middleware (AuthMiddleware +
  * CsrfMiddleware); the controller does not duplicate the check. PATCH,
- * DELETE, and refreshPublicToken additionally gate behind canEdit()
- * so a non-admin caller can only touch their own rows.
- *
- * The four methods were lifted verbatim from spora-core PR #221 (the
- * `e93495d` diff that trimmed MediaArchiveController to `index()` only)
- * — only the FQCN and namespace changed.
+ * DELETE and refreshPublicToken additionally gate behind canEdit() so a
+ * non-admin caller can only touch their own rows.
  */
 final class MediaArchiveAdminController
 {
@@ -44,8 +38,9 @@ final class MediaArchiveAdminController
     public function __construct(
         private readonly MediaArchiveService $mediaArchive,
         private readonly AuthService $auth,
-        // PHP-DI autowires a real instance in production; tests pass
-        // null and rely on the explicit `$defaultSerializer` arg instead.
+        // PHP-DI injects a real instance in production — the plugin's own
+        // container definition force-injects it — so the nullable default
+        // only applies to tests.
         private readonly ?MediaDerivativeService $derivatives = null,
         private readonly MediaAssetSerializer $defaultSerializer = new MediaAssetSerializer(),
         private readonly array $config = [],
@@ -95,11 +90,6 @@ final class MediaArchiveAdminController
         return new JsonResponse(['data' => ['deleted' => true, 'id' => $id]]);
     }
 
-    /**
-     * Rotate the public-access token on a media row.
-     *
-     * POST /api/v1/media/{id}/public-token/refresh
-     */
     public function refreshPublicToken(string $id): JsonResponse
     {
         $asset = $this->mediaArchive->find($id);
@@ -184,10 +174,9 @@ final class MediaArchiveAdminController
 
     /**
      * Run each per-field validator in order; the first one that produces
-     * an error message short-circuits the response. Per-field checks live
-     * in their own helpers so the orchestrator stays under SonarQube's
-     * 15 cognitive-complexity threshold — each helper is a free method
-     * call from this scope.
+     * an error message short-circuits the response. The per-field checks
+     * live in {@see MediaArchiveUpdateValidator}, so this stays a flat list
+     * of calls.
      *
      * @param array<string, mixed> $body
      */
