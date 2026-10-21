@@ -14,32 +14,27 @@ use Spora\Plugins\MediaArchive\Http\MediaArchiveAdminController;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
- * Plugin entry point — extending {@see AbstractPlugin} (rather than directly
- * implementing {@see \Spora\Plugins\PluginInterface}) means we only have to
- * override the hooks we actually use.
+ * Plugin entry point. Extending {@see AbstractPlugin} rather than
+ * implementing {@see \Spora\Plugins\PluginInterface} directly means only the
+ * hooks this plugin uses have to be overridden.
  *
- * The Media Archive is a presentational plugin: it surfaces the rows already
- * indexed by spora-core's {@see \Spora\Services\MediaArchive\MediaArchiveService}.
- * No tools, drivers, recipes, or migrations are contributed — the plugin's
- * job is to ship the admin panel that consumes the REST API.
+ * The plugin surfaces the rows core's
+ * {@see \Spora\Services\MediaArchive\MediaArchiveService} already indexes; it
+ * contributes no ingestion of its own. The panel's Vue SPA ships as a
+ * separate Composer package (`spora-ai/spora-plugin-media-archive-frontend`,
+ * type `spora-plugin-frontend`) and the host SPA lazy-loads it from
+ * `/plugins/<slug>/main.js`.
  *
- * The Vue SPA that powers the panel is delivered as a separate Composer
- * package (`spora-ai/spora-plugin-media-archive-frontend`, type
- * `spora-plugin-frontend`). The `SporaPluginFrontendInstaller` in
- * `spora-installer` copies that package's `frontend/` directory into
- * `public/plugins/spora-plugin-media-archive-frontend/` so the SPA can
- * lazy-load it via `/plugins/<slug>/main.js`.
+ * The entry-point filename MUST match the FQCN (`MediaArchivePlugin.php` →
+ * `Spora\Plugins\MediaArchive\MediaArchivePlugin`): the manifest's `class`
+ * is resolved through the package's PSR-4 mapping, and a class that is not
+ * autoloadable fails the boot with
+ * {@see \Spora\Plugins\Exceptions\PluginLoadFailedException}.
  *
- * PSR-4 note: the entry-point filename MUST match the FQCN
- * (`MediaArchivePlugin.php` → `Spora\Plugins\MediaArchive\MediaArchivePlugin`).
- * {@see \Spora\Plugins\PluginLoader} resolves the class via PSR-4 autoloading
- * and throws {@see \Spora\Plugins\Exceptions\PluginLoadFailedException} on
- * miss — see CLAUDE.md § Plugin authoring.
- *
- * Side-effect wiring (DI bindings + routes) is delivered through
- * {@see EventSubscriberInterface} so {@see \Spora\Plugins\PluginLoader}'s
- * subscriber-wiring loop picks it up on every request, including warm
- * cache boots. See `spora-workspace/plans/extension-interface-events.md`.
+ * DI bindings and routes are registered through
+ * {@see EventSubscriberInterface} — core has no per-plugin fallback hook —
+ * and the loader wires subscribers outside its warm-cache branch, so they
+ * survive a warm boot.
  */
 final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriberInterface
 {
@@ -66,11 +61,11 @@ final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriber
     /**
      * Force-inject {@see \Spora\Services\MediaArchive\MediaDerivativeService}
      * into {@see MediaArchiveAdminController}'s nullable `?MediaDerivativeService`
-     * ctor arg via `\DI\autowire()->constructorParameter(...)`.
+     * ctor arg.
      *
-     * `\DI\autowire()` honours the ctor's `= null` defaults for nullable
-     * params, which silently skips the `MediaDerivativeService` injection.
-     * Force the param so the detail page gets derivatives on reload.
+     * `\DI\autowire()` honours the ctor's `= null` default for a nullable
+     * param, which silently skips the injection; the detail page then never
+     * sees the persisted derivatives on reload.
      */
     public function onContainerBuilding(ContainerBuildingEvent $event): void
     {
@@ -81,18 +76,10 @@ final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriber
     }
 
     /**
-     * Register the four plugin-owned admin routes
-     * (`GET`/`PATCH`/`DELETE` `/api/v1/media/{id}` and
-     * `POST /api/v1/media/{id}/public-token/refresh`) behind Auth + CSRF.
-     *
-     * These used to live in spora-core's `MediaArchiveController`; spora-core
-     * PR #221 trimmed that controller to `index()` only and the four
-     * mutating endpoints moved here so the plugin owns its CRUD end-to-end,
-     * mirroring the `spora-plugin-memories` pattern. The list endpoint
-     * stays in core because the composer and upload UI also call it.
+     * Register the plugin-owned admin routes behind Auth + CSRF.
      *
      * Fires per request after the project's App routes are registered
-     * (see {@see \Spora\Plugins\PluginLoader::registerRoutes()}).
+     * ({@see \Spora\Plugins\PluginLoader::registerRoutes()}).
      */
     public function onRoutesRegistering(RoutesRegisteringEvent $event): void
     {
@@ -120,16 +107,9 @@ final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriber
      * Contribute the archive's rows to the host ⌘K palette, so an asset is
      * findable by what it contains rather than only by browsing the grid.
      *
-     * Distinct from {@see self::apps()}: that makes the panel *reachable*,
-     * this makes its contents *findable*. The provider returns hits that
-     * link into that panel, which is why the two have to agree on the
-     * asset path shape.
-     *
-     * No DI definition in {@see self::onContainerBuilding()} is needed for
-     * it: `SearchProviderRegistry` resolves each provider class straight
-     * from the container, and PHP-DI autowires a class whose constructor
-     * takes nothing — which this one deliberately does, since it needs
-     * nothing but the model it queries.
+     * No DI definition is needed: the registry resolves provider classes
+     * straight from the container, and this one has no constructor
+     * arguments.
      *
      * @return array<int, class-string<\Spora\Search\SearchProviderInterface>>
      */
@@ -141,24 +121,7 @@ final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriber
     }
 
     /**
-     * Translation catalogues this plugin ships, declared through
-     * {@see \Spora\Plugins\PluginInterface::translationsPaths()}.
-     *
-     * Keys are the English source text — `de.json` reads
-     * `{"Media Archive": "Medienarchiv"}`, not `{"app": "…"}`. That is what
-     * makes a copy edit detectable: the key changes and the old entry
-     * orphans. The gate is this plugin's own `LocaleCatalogTest`, not the
-     * host's `i18n:check` — that command harvests core's `app/` and reads
-     * core's `locales/en.json`, so run against a plugin repo it reports
-     * every catalogue key as an orphan.
-     *
-     * **Only operator copy belongs in here.** This plugin ships no tool
-     * and declares no setting, so the admin app's `displayName()` and
-     * `description()` plus the manifest description are the whole of it.
-     *
-     * Requires `spora-core >= 0.31.0` for the catalogue to be loaded. On an
-     * older core the host never calls this hook and the plugin renders in
-     * English.
+     * The plugin's `locales/` directory — one `<lang>.json` per language.
      *
      * @return string[]
      */

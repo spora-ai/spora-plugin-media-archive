@@ -18,12 +18,10 @@ use Spora\Search\SearchProviderInterface;
  *
  * Reads {@see MediaAsset} directly rather than going through
  * {@see \Spora\Services\MediaArchive\MediaArchiveService::list()}: the list
- * endpoint's `search` covers `prompt` / `filename` / URLs only, ranks by
- * `created_at`, and paginates, none of which is what a palette row wants.
- * The ownership predicate below is the part that must not drift, and it is
- * deliberately the same shape.
- *
- * SCOPING — the rule, and the row it cannot reach.
+ * endpoint's `search` covers `prompt` / `filename` / the URLs and the id,
+ * ranks by `created_at`, and paginates, none of which is what a palette row
+ * wants. The ownership predicate below is the part that must not drift, and
+ * it is deliberately the same shape.
  *
  * Scope is structural, as {@see SearchProviderInterface} demands: the query
  * is built from {@see SearchContext::principalIds()} and nothing else, so
@@ -34,19 +32,19 @@ use Spora\Search\SearchProviderInterface;
  * `applyPrincipalIdScope()`, and deliberately NOT this plugin's own
  * `MediaArchiveAdminController::canEdit()`:
  *
- *   - `canEdit()` is a *mutation* gate, and it answers a different
- *     question. It reads `user_id`, because `user_id` is the column that
- *     says who pushed the bytes. An admin passes it unconditionally.
+ *   - `canEdit()` is a *mutation* gate: it reads `user_id`, the column
+ *     that says who pushed the bytes, and an admin passes it
+ *     unconditionally.
  *   - `SearchContext` hands out principal ids, and core resolves them the
  *     same way for every caller — an admin's context is the admin's own
- *     visible principals, not "all of them". Adding an admin bypass here
- *     would be precisely the cross-tenant read the interface forbids.
+ *     visible principals, not "all of them". An admin bypass here would be
+ *     precisely the cross-tenant read the interface forbids.
  *   - `user_id` is not a visibility column. Migration 0075 backfilled
- *     `principal_id` for every row that had a `user_id` or an `agent_id`,
- *     so a `user_id`-only row (a legacy direct upload) is reachable
- *     through this predicate exactly as the archive grid already reaches
- *     it — through the uploader's user-principal, which
- *     `PrincipalResolver::visiblePrincipalIds()` always includes.
+ *     `principal_id` for every row with a `user_id` or an `agent_id`, so a
+ *     `user_id`-only row (a legacy direct upload) is reachable here
+ *     exactly as the archive grid reaches it — through the uploader's
+ *     user-principal, which `PrincipalResolver::visiblePrincipalIds()`
+ *     always includes.
  *
  * What is therefore NOT findable here: rows with no attribution at all —
  * `principal_id IS NULL AND agent_id IS NULL`, i.e. anonymous ingestion,
@@ -54,9 +52,8 @@ use Spora\Search\SearchProviderInterface;
  * context can ever contain it, and migration 0075's own docblock records
  * that they surface only under the archive's unscoped `ALL` chip. Widening
  * to reach them is not an option for a palette provider, so they stay out;
- * this is a real coverage gap for those rows, and the honest fix is an
- * owner column or a bulk backfill in core, not a provider that reads
- * rows nobody scoped.
+ * the honest fix is an owner column or a bulk backfill in core, not a
+ * provider that reads rows nobody scoped.
  *
  * `agent_id` and `task_id` are not filtered on. A tool-generated asset
  * belongs to whoever owns its agent, which the agent-join branch already
@@ -67,9 +64,9 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
 {
     /**
      * Palette section bucket, matching the `plugin.json` slug so the
-     * palette labels the section from the same string the app registry,
-     * the routes and the asset path all use. A stable slug, not a
-     * human-facing label: it is half of the palette's dedup key.
+     * palette labels the section from the same string the app registry and
+     * the asset path use. A stable slug, not a human-facing label: it is
+     * half of the palette's dedup key.
      */
     private const TYPE = 'media-archive';
 
@@ -77,16 +74,16 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
      * A UX bound, not a security one — the scope predicate is applied
      * below it in {@see self::query()}, not above it. The palette renders
      * one bounded list, and a media archive is a document set, not a
-     * fixed-size affordance: a busy group's archive holds far more than
-     * twenty documents, so the bound has to be the host's rather than the
-     * archive's.
+     * fixed-size affordance: a busy group's archive holds far more
+     * documents than the cap allows, so the bound has to be the host's
+     * rather than the archive's.
      *
      * The cap is GLOBAL across the principals in the context, not
-     * per-principal, so twenty exact-filename matches under one principal
-     * fill every slot and a second principal's one matching asset is not
-     * offered at all. That is a deliberate trade rather than an oversight,
-     * because the fair partition is not available on this query: it takes
-     * either a round trip per principal (one per debounced keystroke) or a
+     * per-principal, so one principal's exact-filename matches fill every
+     * slot and a second principal's single matching asset is not offered at
+     * all. That is a deliberate trade rather than an oversight, because the
+     * fair partition is not available on this query: it takes either a
+     * round trip per principal (one per debounced keystroke) or a
      * `ROW_NUMBER() OVER (PARTITION BY …)` window, and the window version
      * still piles every legacy agent-scoped row into one bucket under its
      * NULL `principal_id` — the same starvation wearing a partition. The
@@ -112,12 +109,13 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
      * nothing.
      *
      * `payload` is why this list exists. It is a MEDIUMBLOB with a 16 MiB
-     * ceiling (core migration 0064), and on the default `auto` asset store
-     * anything over 1 MiB is stored there — so an unselected `->get()`
-     * pulls up to twenty blobs and holds them for the length of a
-     * debounced keystroke on shared hosting. {@see self::SUB_LABEL_LIMIT}
-     * is the same objection two orders of magnitude smaller; the blob was
-     * the part it missed.
+     * ceiling (core migration 0064), and the `data_url` asset store — plus
+     * the default `auto` store for everything below its 1 MiB threshold —
+     * writes the bytes straight into it. An unselected `->get()` would pull
+     * up to `MAX_HITS` of those blobs and hold them for the length of a
+     * debounced keystroke on shared hosting.
+     * {@see self::SUB_LABEL_LIMIT} is the same objection two orders of
+     * magnitude smaller; the blob was the part it missed.
      *
      * `tests/Unit/MediaAssetSearchProviderTest.php` reconciles this list
      * against the properties the provider actually reads, so a model read
@@ -141,14 +139,11 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
      * belongs rather than appended.
      *
      * Filename outranks every body field on purpose: a prompt, a tag, and
-     * especially a transcript are prose, and prose is weak evidence. The
-     * palette's own client-side search has the same problem — filtering its
-     * item list by `subLabel` is how a group called "Media" outranks the
-     * document actually typed. A filename is a name, and a name is what
-     * somebody means to find. Within the body, `prompt` first (what the
-     * asset was *for*), then `tags` (short and deliberate), then
-     * `transcript` last (long, machine-generated, and near-certain to
-     * contain any common word).
+     * especially a transcript are prose, and prose is weak evidence. A
+     * filename is a name, and a name is what somebody means to find.
+     * Within the body, `prompt` first (what the asset was *for*), then
+     * `tags` (short and deliberate), then `transcript` last (long,
+     * machine-generated, and near-certain to contain any common word).
      */
     private const RANK_FILENAME_EXACT = 0;
     private const RANK_FILENAME_PREFIX = 1;
@@ -172,17 +167,16 @@ final readonly class MediaAssetSearchProvider implements SearchProviderInterface
     private const LIKE_ESCAPE = " ESCAPE '!' ";
 
     /**
-     * The `THEN <rank>` half of a CASE arm, named because {@see self::rankSql()}
-     * repeats it once per tier and the repeat is exactly what makes an arm
-     * hard to re-read: the rank constants carry the ranking, this carries the
-     * grammar, and mixing them in one literal hides that split.
+     * The `THEN <rank>` half of a CASE arm. It is kept apart from the rank
+     * constants so the ranking and the grammar do not end up in one
+     * literal.
      */
     private const THEN = ' THEN ';
 
     /**
      * A prompt is a paragraph; a palette row is one line. The host UI
-     * truncates visually, but sending 4 KB of prompt text per hit to
-     * render one clipped line is waste on every keystroke of a debounced
+     * truncates the sublabel visually, but sending the whole prompt per hit
+     * to render one clipped line is waste on every keystroke of a debounced
      * search, and the tail of a prompt is rarely the identifying part.
      */
     private const SUB_LABEL_LIMIT = 160;
