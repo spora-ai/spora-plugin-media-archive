@@ -14,14 +14,13 @@ use Spora\Apps\VueAppInterface;
  * the shared layout.
  *
  * The slug returned by {@see name()} (`media-archive`) is the host SPA's
- * route key. It is independent of the Composer package name (which is
- * `spora-ai/spora-plugin-media-archive`) and of the frontend bundle's
- * on-disk directory (which is derived from the *frontend* package's name
- * by {@see \Spora\Composer\SporaPluginFrontendInstaller}, not this one).
+ * route key, and it is also the frontend bundle's on-disk directory:
+ * `SporaPluginFrontendInstaller` copies the bundle into
+ * `public/plugins/media-archive/`, keyed by the frontend package's
+ * `extra.spora-plugin-slug` — not by the Composer package name.
  *
  * The `entry()` value (`main.js`) MUST match the frontend bundle's
- * `build.lib.fileName()` from its `vite.config.ts`. The build pipeline is
- * documented in `spora-plugin-media-archive-frontend/README.md`.
+ * `build.lib.fileName()` from its `vite.config.ts`.
  */
 final class MediaArchiveApp implements VueAppInterface
 {
@@ -42,8 +41,8 @@ final class MediaArchiveApp implements VueAppInterface
 
     public function icon(): string
     {
-        // `image` is in the bundled icon palette — see
-        // spora-core/docs/07_plugins.md § Bundled icons.
+        // `image` is a bundled icon name in spora-components'
+        // `src/icons/Icon.vue`; an unknown name falls back to `puzzle`.
         return 'image';
     }
 
