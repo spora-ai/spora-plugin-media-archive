@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Mockery as M;
+use Spora\Core\Config;
 use Spora\Core\Database;
 use Spora\Core\DatabaseSchemaInstaller;
 
@@ -89,7 +90,7 @@ uses()
         // the cwd. Use a per-process tmp file instead — the
         // transaction rollback in afterEach discards everything anyway.
         $tmpDb = sys_get_temp_dir() . '/spora-plugin-media-archive-' . bin2hex(random_bytes(4)) . '.sqlite';
-        $db = new Database(['db_driver' => 'sqlite', 'db_path' => $tmpDb]);
+        $db = new Database(new Config(['SPORA_DB_DRIVER' => 'sqlite', 'SPORA_DB_PATH' => $tmpDb]));
         $db->bootDatabaseConnectionOnly();
 
         // Install the full core migration set so the controller under
