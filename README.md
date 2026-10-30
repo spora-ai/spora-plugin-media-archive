@@ -13,7 +13,7 @@ composer require spora-ai/spora-plugin-media-archive-frontend
 
 Both packages are required: the PHP package contributes the admin-panel metadata (`MediaArchiveApp` → `VueAppInterface`), and the frontend package ships the Vue IIFE bundle that the host SPA lazy-loads at runtime.
 
-Requires `spora-ai/spora-core` ≥ 0.30.0, which is where `Spora\Search\SearchProviderInterface` landed (core #279) — the plugin's search provider implements it, and 0.30.0 is also the first version whose ingest pipeline the plugin's tests are written against.
+Requires `spora-ai/spora-core` ≥ 0.33.0 — the release that carries core's folders (core #310). The asset editor hard-requires `Spora\Services\MediaArchive\MediaFolderService` and `Spora\Services\MediaArchive\MediaAssetKind`, so the floor is where the plugin's dependency starts: below it the installer refuses to resolve, and the operator upgrades core or stays on the previous plugin version. The floor before the folders was 0.30.0, which is where `Spora\Search\SearchProviderInterface` landed (core #279).
 
 ## What it does
 
@@ -23,6 +23,9 @@ Requires `spora-ai/spora-core` ≥ 0.30.0, which is where `Spora\Search\SearchPr
 - Click-through detail drawer with metadata (dimensions, duration, mime type, source URL).
 - A `derivatives` strip below the asset row (format chip + producer + asset URL). Populated from the `media_derivatives` join table; the controller reads it via `MediaDerivativeService::listFor()` so chips survive a hard reload, not just the in-memory splice on derivative production.
 - One-click download via the existing `AssetController::show()` route.
+- **Filing and marking:** `PATCH /api/v1/media/{id}` takes `folder_id` — a folder of the asset's own tenant, or `null` for the root — and `kind`, one of `asset`, `template`, `example`. The mark is advisory: a filter hint for the operator, never a gate. Filenames are unique **within** a folder, and the folder owns that rule: filing an asset into a folder that already holds that name, or renaming a file inside a folder to a name it holds, is refused with the folder's own message (`The folder "Corporate" already holds a file named "report.md".`) — the folder's uniqueness rule, not a broken edit.
+- **The two paths answer the same rule differently.** A `kind` outside the vocabulary is a **400** on core's upload (`POST /api/v1/media`) — a malformed field in the request body — and a **422** (`INVALID_KIND`) on this plugin's PATCH — a semantic refusal of a value the server read and will not store. The house rule is that a malformed value is a 400 and a semantic refusal is a 422, and each path answers on its own side of that line.
+- **An empty `folder_id` is refused, not read as the root.** `""` names no folder, so the PATCH answers **422** (`UNKNOWN_FOLDER`) and leaves the asset where it is. Core's folder service reads an empty string as the root — the root is `null`.
 - Palette search (⌘K): `MediaAssetSearchProvider` makes archive assets findable by name or by content, under the `media-archive` section of the host palette. See [Palette search (⌘K)](#palette-search-⌘k) below.
 
 The plugin itself adds no tools, drivers, recipes, or migrations.
