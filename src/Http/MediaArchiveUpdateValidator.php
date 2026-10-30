@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\MediaArchive\Http;
 
+use Spora\Services\MediaArchive\MediaAssetKind;
+
 /**
  * PATCH /api/v1/media/{id} field validators.
  *
  * Split out of the controller so the patch surface keeps one method per
  * field — the SonarCloud S1448 rule caps a class at a fixed number of
  * methods. Each method returns the first error string it finds for the
- * field, or null when the payload passes. `null` is the "absent field"
- * sentinel too — the controller treats absent vs present-but-valid
- * identically (no-op for the patch).
+ * field, or null when the payload passes.
+ *
+ * `null` is the "absent field" sentinel for most fields: the controller
+ * treats an absent field and a present-but-valid one alike. `folder_id`
+ * is the exception — `null` there means the root, and it is a write.
  */
 final class MediaArchiveUpdateValidator
 {
@@ -93,6 +97,49 @@ final class MediaArchiveUpdateValidator
         }
         if (!is_bool($body[$field])) {
             return $errorMessage;
+        }
+        return null;
+    }
+
+    /**
+     * `folder_id` names the folder the asset is filed in; `null` files it
+     * back into the root.
+     *
+     * Only the shape is checked here. Whether the folder exists, whose
+     * it is and whether the name is free in it belong to core's folder
+     * service, which raises them as domain errors the controller turns
+     * into a 422.
+     *
+     * @param array<string, mixed> $body
+     */
+    public static function validateFolderId(array $body): ?string
+    {
+        if (!array_key_exists('folder_id', $body)) {
+            return null;
+        }
+        $value = $body['folder_id'];
+        if ($value !== null && !is_string($value)) {
+            return 'folder_id must be a string or null.';
+        }
+        return null;
+    }
+
+    /**
+     * `kind` is the advisory mark, and the vocabulary is closed on a
+     * write: the listing filter drops an unknown mark silently, and
+     * storing a mark the operator did not ask for is worse than
+     * refusing the write.
+     *
+     * @param array<string, mixed> $body
+     */
+    public static function validateKind(array $body): ?string
+    {
+        if (!array_key_exists('kind', $body)) {
+            return null;
+        }
+        $value = $body['kind'];
+        if (!is_string($value) || !in_array($value, MediaAssetKind::ALL, true)) {
+            return 'kind must be one of: ' . implode(', ', MediaAssetKind::ALL) . '.';
         }
         return null;
     }

@@ -8,9 +8,12 @@ use JsonException;
 use Spora\Auth\AuthService;
 use Spora\Http\JsonControllerHelpers;
 use Spora\Models\MediaAsset;
+use Spora\Services\MediaArchive\Exceptions\MediaFolderNotFoundException;
+use Spora\Services\MediaArchive\Exceptions\MediaFolderUniquenessException;
 use Spora\Services\MediaArchive\MediaArchiveService;
 use Spora\Services\MediaArchive\MediaAssetSerializer;
 use Spora\Services\MediaArchive\MediaDerivativeService;
+use Spora\Services\MediaArchive\MediaFolderService;
 use Spora\Services\Text\Utf8Sanitizer;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -18,10 +21,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Plugin-owned admin REST surface for the Media Archive rows that the
- * operator dashboard edits: single-asset detail, PATCH metadata, DELETE and
- * rotating the public-access token. The list endpoint stays in
- * {@see \Spora\Http\MediaArchiveController::index} because the composer and
- * upload UI call it too.
+ * operator dashboard edits: single-asset detail, PATCH (metadata, folder,
+ * kind), DELETE and rotating the public-access token. The list endpoint
+ * stays in {@see \Spora\Http\MediaArchiveController::index} because the
+ * composer and upload UI call it too.
  *
  * Auth is enforced by the route's middleware (AuthMiddleware +
  * CsrfMiddleware); the controller does not duplicate the check. PATCH,
@@ -35,9 +38,17 @@ final class MediaArchiveAdminController
     private const MSG_NOT_FOUND  = 'Media asset not found.';
     private const MSG_FORBIDDEN  = 'You do not own this media asset.';
 
+    /**
+     * A folder the caller may not file into is reported as a folder that
+     * does not exist: the caller has no business learning that a folder
+     * of another tenant is there.
+     */
+    private const MSG_UNKNOWN_FOLDER = 'That folder does not exist for this asset.';
+
     public function __construct(
         private readonly MediaArchiveService $mediaArchive,
         private readonly AuthService $auth,
+        private readonly MediaFolderService $folders,
         // PHP-DI injects a real instance in production — the plugin's own
         // container definition force-injects it — so the nullable default
         // only applies to tests.
@@ -70,9 +81,20 @@ final class MediaArchiveAdminController
         }
 
         $dirty = $this->extractUpdatableFields($body);
+        $filing = array_key_exists('folder_id', $dirty);
+        $folderId = $filing && is_string($dirty['folder_id']) ? $dirty['folder_id'] : null;
+        unset($dirty['folder_id']);
+
         if ($dirty !== []) {
             $editable->fill(Utf8Sanitizer::scrub($dirty));
-            $editable->save();
+        }
+
+        try {
+            $this->write($editable, $filing, $folderId, $dirty);
+        } catch (MediaFolderNotFoundException) {
+            return $this->unprocessable('UNKNOWN_FOLDER', self::MSG_UNKNOWN_FOLDER);
+        } catch (MediaFolderUniquenessException $e) {
+            return $this->unprocessable('FOLDER_FILENAME_TAKEN', $e->getMessage());
         }
 
         return new JsonResponse(['data' => $this->serializer()->serialize($editable, $this->configUrl())]);
@@ -141,29 +163,76 @@ final class MediaArchiveAdminController
     }
 
     /**
+     * Persist the patched fields.
+     *
+     * The folder write goes through core's folder service: the UNIQUE
+     * `(folder_id, filename)` index is a domain rule the service owns, and
+     * a `fill()` would land on the raw index and raise a driver-level
+     * error instead of a message the operator can act on.
+     *
+     * @param array<string, mixed> $dirty
+     */
+    private function write(MediaAsset $asset, bool $filing, ?string $folderId, array $dirty): void
+    {
+        if ($filing) {
+            $this->folders->fileAsset($this->principalId($asset), $asset, $folderId);
+            return;
+        }
+
+        // A rename inside a folder is bound by the same filename rule, so
+        // it goes through the service too — re-filed into the folder the
+        // asset already sits in.
+        if (array_key_exists('filename', $dirty) && $asset->folder_id !== null) {
+            $this->folders->fileAsset($this->principalId($asset), $asset, (string) $asset->folder_id);
+            return;
+        }
+
+        $asset->save();
+    }
+
+    /**
+     * The principal a folder lookup is scoped to.
+     *
+     * An asset with no principal belongs to no tenant, so no folder is
+     * fileable into it: the lookup runs against principal 0, which owns
+     * no folder, and the folder is reported as unknown.
+     */
+    private function principalId(MediaAsset $asset): int
+    {
+        return (int) ($asset->principal_id ?? 0);
+    }
+
+    /**
      * @param array<string, mixed> $body
      * @return array<string, mixed>
      */
     private function extractUpdatableFields(array $body): array
     {
         $dirty = [];
-        // `markdown_content` left this allowlist when document extraction
-        // moved to `md` derivatives in spora-core. The list stays an
-        // allowlist, and it is the only gate on the write path: a key it
-        // does not name never reaches `fill()`, so a stale client that
-        // still PATCHes it gets a silent no-op, and the rest of the body
-        // still applies.
+        // The list is an allowlist and the only gate on the write path: a
+        // key it does not name never reaches the write, so a stale client
+        // that still PATCHes it gets a silent no-op and the rest of the
+        // body still applies. `markdown_content` left the list when
+        // document extraction moved to `md` derivatives in spora-core.
         //
-        // That is also what makes the merge order safe. The key can be
-        // dropped here first — against a core that still has the column it
-        // is a silent capability loss, not a break. The direction that does
-        // break is the reverse: core dropping the column while this
-        // allowlist still names the key puts a write to a missing column on
-        // every PATCH that carries one. So core's cut must not land first.
-        foreach (['filename', 'tags', 'metadata', 'prompt'] as $field) {
+        // The ordering runs both ways. A key may be dropped here before
+        // core drops its column — against a core that still has the
+        // column that is a silent capability loss, not a break; the
+        // direction that does break is core dropping the column while
+        // this allowlist still names the key, which writes to a missing
+        // column on every PATCH that carries one. A key may be *named*
+        // here only once core has the column, so `folder_id` and `kind`
+        // follow core's folders release.
+        foreach (['filename', 'tags', 'metadata', 'prompt', 'kind'] as $field) {
             if (array_key_exists($field, $body)) {
                 $dirty[$field] = $body[$field];
             }
+        }
+        if (array_key_exists('folder_id', $body)) {
+            // The folder is written by core's folder service, not by
+            // `fill()`: the filename rule inside a folder is the
+            // service's, and it raises it as a domain error.
+            $dirty['folder_id'] = $body['folder_id'];
         }
         if (array_key_exists('public_access_enabled', $body)) {
             $enabled = $body['public_access_enabled'];
@@ -178,6 +247,10 @@ final class MediaArchiveAdminController
      * live in {@see MediaArchiveUpdateValidator}, so this stays a flat list
      * of calls.
      *
+     * A malformed value is a 400 like every other field on the patch
+     * surface; a value the server reads but will not store — a kind
+     * outside the vocabulary — is a 422.
+     *
      * @param array<string, mixed> $body
      */
     private function validateUpdatableFields(array $body): ?JsonResponse
@@ -188,12 +261,19 @@ final class MediaArchiveAdminController
             MediaArchiveUpdateValidator::validateArray($body, 'metadata', 'metadata must be an object.'),
             MediaArchiveUpdateValidator::validateString($body, 'prompt', 'prompt must be a string.'),
             MediaArchiveUpdateValidator::validateBool($body, 'public_access_enabled', 'public_access_enabled must be a boolean.'),
+            MediaArchiveUpdateValidator::validateFolderId($body),
         ];
         foreach ($messages as $message) {
             if ($message !== null) {
                 return $this->badRequest($message);
             }
         }
+
+        $kind = MediaArchiveUpdateValidator::validateKind($body);
+        if ($kind !== null) {
+            return $this->unprocessable('INVALID_KIND', $kind);
+        }
+
         return null;
     }
 

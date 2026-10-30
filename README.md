@@ -15,6 +15,8 @@ Both packages are required: the PHP package contributes the admin-panel metadata
 
 Requires `spora-ai/spora-core` ≥ 0.30.0, which is where `Spora\Search\SearchProviderInterface` landed (core #279) — the plugin's search provider implements it, and 0.30.0 is also the first version whose ingest pipeline the plugin's tests are written against.
 
+The asset editor's folder and kind support needs core's folders release (core #310) — `MediaFolderService` and `MediaAssetKind`. The plugin ships after that core release, so the two are never out of step: the PATCH writes a folder through core's folder service and refuses a kind outside its vocabulary.
+
 ## What it does
 
 - Surfaces rows from the `media_assets` table (indexed by `MediaArchiveService`) as a filterable grid in the admin UI.
