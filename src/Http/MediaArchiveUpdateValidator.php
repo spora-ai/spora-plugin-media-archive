@@ -110,6 +110,9 @@ final class MediaArchiveUpdateValidator
      * service, which raises them as domain errors the controller turns
      * into a 422.
      *
+     * The empty string is a shape this accepts and a folder no caller
+     * can name; the controller refuses it as an unknown folder.
+     *
      * @param array<string, mixed> $body
      */
     public static function validateFolderId(array $body): ?string

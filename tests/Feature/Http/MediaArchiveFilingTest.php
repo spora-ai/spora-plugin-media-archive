@@ -57,6 +57,26 @@ test('PATCH folder_id null files the asset back into the root', function (): voi
     expect(MediaAsset::query()->findOrFail($asset->id)->folder_id)->toBeNull();
 });
 
+/**
+ * An empty string names no folder. Core's folder service reads one as
+ * the root, so the plugin refuses it rather than let a write the caller
+ * never asked for land.
+ */
+test('PATCH refuses an empty folder_id with 422 instead of filing the asset into the root', function (): void {
+    [$service, $controller] = buildFilingController();
+    $principalId = createFilingPrincipal(1);
+    $asset = ingestFiledSample($service, $principalId);
+    $folder = filingFolderService()->create($principalId, 'Corporate');
+    filingFolderService()->fileAsset($principalId, $asset, (string) $folder->id);
+
+    $resp = patchAsset($controller, $asset->id, ['folder_id' => '']);
+
+    expect($resp->getStatusCode())->toBe(422);
+    $body = json_decode($resp->getContent(), true);
+    expect($body['error']['code'])->toBe('UNKNOWN_FOLDER');
+    expect(MediaAsset::query()->findOrFail($asset->id)->folder_id)->toBe((string) $folder->id);
+});
+
 test('PATCH refuses a folder of another principal with 422', function (): void {
     [$service, $controller] = buildFilingController();
     $principalId = createFilingPrincipal(1);

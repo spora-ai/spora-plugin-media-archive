@@ -45,6 +45,11 @@ final class MediaArchiveAdminController
      */
     private const MSG_UNKNOWN_FOLDER = 'That folder does not exist for this asset.';
 
+    /**
+     * An empty `folder_id` names no folder; the root is `null`.
+     */
+    private const MSG_EMPTY_FOLDER = 'An empty folder_id names no folder. Send a folder id, or null to file the asset into the root.';
+
     public function __construct(
         private readonly MediaArchiveService $mediaArchive,
         private readonly AuthService $auth,
@@ -249,7 +254,7 @@ final class MediaArchiveAdminController
      *
      * A malformed value is a 400 like every other field on the patch
      * surface; a value the server reads but will not store — a kind
-     * outside the vocabulary — is a 422.
+     * outside the vocabulary, a folder that does not exist — is a 422.
      *
      * @param array<string, mixed> $body
      */
@@ -267,6 +272,14 @@ final class MediaArchiveAdminController
             if ($message !== null) {
                 return $this->badRequest($message);
             }
+        }
+
+        // Core's folder service reads an empty string as the root, so the
+        // empty string is refused here rather than by `validateFolderId()`:
+        // `null` is the root, and a write the caller never asked for is
+        // worse than a refusal.
+        if (($body['folder_id'] ?? null) === '') {
+            return $this->unprocessable('UNKNOWN_FOLDER', self::MSG_EMPTY_FOLDER);
         }
 
         $kind = MediaArchiveUpdateValidator::validateKind($body);
