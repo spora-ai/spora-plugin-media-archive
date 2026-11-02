@@ -15,6 +15,8 @@ Both packages are required: the PHP package contributes the admin-panel metadata
 
 Requires `spora-ai/spora-core` ≥ 0.33.0 — the release that carries core's folders (core #310). The asset editor hard-requires `Spora\Services\MediaArchive\MediaFolderService` and `Spora\Services\MediaArchive\MediaAssetKind`, so the floor is where the plugin's dependency starts: below it the installer refuses to resolve, and the operator upgrades core or stays on the previous plugin version. The floor before the folders was 0.30.0, which is where `Spora\Search\SearchProviderInterface` landed (core #279).
 
+Until 0.33.0 is on Packagist, the plugin's own `composer.json` accepts `dev-feat/media-folders` — the branch the release is cut from — so that the plugin's CI and its development install resolve a core that has the folders. An operator never sees that alternative: composer's default `minimum-stability` refuses a dev version, so the install needs the release either way. The clause leaves the manifest when the release is published.
+
 ## What it does
 
 - Surfaces rows from the `media_assets` table (indexed by `MediaArchiveService`) as a filterable grid in the admin UI.
