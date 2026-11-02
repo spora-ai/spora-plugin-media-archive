@@ -79,27 +79,9 @@ final class MediaArchiveAdminController
             return $editable;
         }
 
-        $body = $this->jsonBody($request);
-        $validation = $this->validateUpdatableFields($body);
-        if ($validation instanceof JsonResponse) {
-            return $validation;
-        }
-
-        $dirty = $this->extractUpdatableFields($body);
-        $filing = array_key_exists('folder_id', $dirty);
-        $folderId = $filing && is_string($dirty['folder_id']) ? $dirty['folder_id'] : null;
-        unset($dirty['folder_id']);
-
-        if ($dirty !== []) {
-            $editable->fill(Utf8Sanitizer::scrub($dirty));
-        }
-
-        try {
-            $this->write($editable, $filing, $folderId, $dirty);
-        } catch (MediaFolderNotFoundException) {
-            return $this->unprocessable('UNKNOWN_FOLDER', self::MSG_UNKNOWN_FOLDER);
-        } catch (MediaFolderUniquenessException $e) {
-            return $this->unprocessable('FOLDER_FILENAME_TAKEN', $e->getMessage());
+        $refusal = $this->applyPatch($editable, $this->jsonBody($request));
+        if ($refusal instanceof JsonResponse) {
+            return $refusal;
         }
 
         return new JsonResponse(['data' => $this->serializer()->serialize($editable, $this->configUrl())]);
@@ -168,7 +150,36 @@ final class MediaArchiveAdminController
     }
 
     /**
-     * Persist the patched fields.
+     * Apply the patch to the asset, or report the first refusal.
+     *
+     * The validation runs before the write: a malformed value never
+     * reaches the model, and a value the server will not store never
+     * reaches the folder service.
+     *
+     * @param array<string, mixed> $body
+     */
+    private function applyPatch(MediaAsset $asset, array $body): ?JsonResponse
+    {
+        $dirty = $this->extractUpdatableFields($body);
+        $filing = array_key_exists('folder_id', $dirty);
+        $folderId = $filing && is_string($dirty['folder_id']) ? $dirty['folder_id'] : null;
+        unset($dirty['folder_id']);
+
+        $refusal = $this->validateUpdatableFields($body);
+        if ($refusal !== null) {
+            return $refusal;
+        }
+
+        if ($dirty !== []) {
+            $asset->fill(Utf8Sanitizer::scrub($dirty));
+        }
+
+        return $this->write($asset, $filing, $folderId, $dirty);
+    }
+
+    /**
+     * Persist the patched fields, or report the refusal the folder
+     * service raises.
      *
      * The folder write goes through core's folder service: the UNIQUE
      * `(folder_id, filename)` index is a domain rule the service owns, and
@@ -177,22 +188,26 @@ final class MediaArchiveAdminController
      *
      * @param array<string, mixed> $dirty
      */
-    private function write(MediaAsset $asset, bool $filing, ?string $folderId, array $dirty): void
+    private function write(MediaAsset $asset, bool $filing, ?string $folderId, array $dirty): ?JsonResponse
     {
-        if ($filing) {
-            $this->folders->fileAsset($this->principalId($asset), $asset, $folderId);
-            return;
+        try {
+            if ($filing) {
+                $this->folders->fileAsset($this->principalId($asset), $asset, $folderId);
+            } elseif (array_key_exists('filename', $dirty) && $asset->folder_id !== null) {
+                // A rename inside a folder is bound by the same filename
+                // rule, so it goes through the service too — re-filed into
+                // the folder the asset already sits in.
+                $this->folders->fileAsset($this->principalId($asset), $asset, (string) $asset->folder_id);
+            } else {
+                $asset->save();
+            }
+        } catch (MediaFolderNotFoundException) {
+            return $this->unprocessable('UNKNOWN_FOLDER', self::MSG_UNKNOWN_FOLDER);
+        } catch (MediaFolderUniquenessException $e) {
+            return $this->unprocessable('FOLDER_FILENAME_TAKEN', $e->getMessage());
         }
 
-        // A rename inside a folder is bound by the same filename rule, so
-        // it goes through the service too — re-filed into the folder the
-        // asset already sits in.
-        if (array_key_exists('filename', $dirty) && $asset->folder_id !== null) {
-            $this->folders->fileAsset($this->principalId($asset), $asset, (string) $asset->folder_id);
-            return;
-        }
-
-        $asset->save();
+        return null;
     }
 
     /**
@@ -260,6 +275,22 @@ final class MediaArchiveAdminController
      */
     private function validateUpdatableFields(array $body): ?JsonResponse
     {
+        $message = $this->malformedField($body);
+        if ($message !== null) {
+            return $this->badRequest($message);
+        }
+
+        return $this->unstorableField($body);
+    }
+
+    /**
+     * The first malformed value on the patch surface, or null when every
+     * field has a usable shape.
+     *
+     * @param array<string, mixed> $body
+     */
+    private function malformedField(array $body): ?string
+    {
         $messages = [
             MediaArchiveUpdateValidator::validateFilename($body),
             MediaArchiveUpdateValidator::validateArray($body, 'tags', 'tags must be an array of strings.'),
@@ -270,14 +301,25 @@ final class MediaArchiveAdminController
         ];
         foreach ($messages as $message) {
             if ($message !== null) {
-                return $this->badRequest($message);
+                return $message;
             }
         }
 
-        // Core's folder service reads an empty string as the root, so the
-        // empty string is refused here rather than by `validateFolderId()`:
-        // `null` is the root, and a write the caller never asked for is
-        // worse than a refusal.
+        return null;
+    }
+
+    /**
+     * The first value the server reads but will not store, or null.
+     *
+     * Core's folder service reads an empty string as the root, so the
+     * empty string is refused here rather than by `validateFolderId()`:
+     * `null` is the root, and a write the caller never asked for is
+     * worse than a refusal.
+     *
+     * @param array<string, mixed> $body
+     */
+    private function unstorableField(array $body): ?JsonResponse
+    {
         if (($body['folder_id'] ?? null) === '') {
             return $this->unprocessable('UNKNOWN_FOLDER', self::MSG_EMPTY_FOLDER);
         }
