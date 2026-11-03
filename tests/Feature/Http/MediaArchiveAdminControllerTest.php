@@ -142,6 +142,7 @@ test('show includes persisted derivatives when MediaDerivativeService is wired',
     $controller = new MediaArchiveAdminController(
         $service,
         stubAuth(1, true),
+        new \Spora\Services\MediaArchive\MediaFolderService(),
         $derivatives,
     );
     $resp = $controller->show($parent->id);
@@ -488,7 +489,7 @@ function buildUpdateController(bool $isAdmin = true, int $userId = 1): array
     $assetStore = new AutoAssetStore($database, $local, 1_048_576);
     $service = MediaArchiveTestSupport::buildService($assetStore);
     $auth = stubAuth($userId, $isAdmin);
-    $controller = new MediaArchiveAdminController($service, $auth);
+    $controller = new MediaArchiveAdminController($service, $auth, new \Spora\Services\MediaArchive\MediaFolderService());
     return [$service, $service, $controller];
 }
 
@@ -522,7 +523,7 @@ function buildDestroyFixtures(bool $isAdmin, int $userId): array
 
     $service = MediaArchiveTestSupport::buildService($assetStore);
     return [
-        new MediaArchiveAdminController($service, stubAuth($userId, $isAdmin)),
+        new MediaArchiveAdminController($service, stubAuth($userId, $isAdmin), new \Spora\Services\MediaArchive\MediaFolderService()),
         $service,
     ];
 }
@@ -549,6 +550,7 @@ function buildSharingController(bool $isAdmin = true, int $userId = 1): array
         new MediaArchiveAdminController(
             $service,
             stubAuth($userId, $isAdmin),
+            new \Spora\Services\MediaArchive\MediaFolderService(),
             null,
             new MediaAssetSerializer(),
             ['app_url' => 'https://test.example/'],

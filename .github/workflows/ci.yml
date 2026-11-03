@@ -10,9 +10,15 @@ name: CI
 # a temporary `path` repository pointing at a sibling core checkout, that entry
 # pinned the package to 0.30.0 in `options.versions` regardless of which ref sat
 # in it — so a green run proved only that the plugin worked against an arbitrary
-# core working tree, not against the declared floor. Resolving `>=0.30.0 <2.0.0`
-# against the published release is what makes a green run mean the declared
-# constraint is actually satisfiable.
+# core working tree, not against the declared floor. Resolving the declared
+# constraint against the sources it names — rather than replaying a lock — is
+# what makes a green run mean the constraint is satisfiable.
+#
+# The floor is core 0.33.0, the release that carries core's folders. It is not
+# on Packagist yet, so the constraint names the branch the release is cut from
+# as well: the update resolves a core that has the folders. An operator still
+# needs the release — their `minimum-stability` refuses a dev version — and
+# once 0.33.0 is published, `prefer-stable` picks it over the branch.
 
 on:
   push:
