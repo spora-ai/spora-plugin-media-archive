@@ -60,18 +60,20 @@ final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriber
 
     /**
      * Force-inject {@see \Spora\Services\MediaArchive\MediaDerivativeService}
-     * into {@see MediaArchiveAdminController}'s nullable `?MediaDerivativeService`
-     * ctor arg.
+     * and {@see \Spora\Services\MediaArchive\MediaActiveTypesPolicy} into
+     * {@see MediaArchiveAdminController}'s nullable ctor args.
      *
      * `\DI\autowire()` honours the ctor's `= null` default for a nullable
      * param, which silently skips the injection; the detail page then never
-     * sees the persisted derivatives on reload.
+     * sees the persisted derivatives on reload, and never sees an embed
+     * descriptor for a script-capable asset.
      */
     public function onContainerBuilding(ContainerBuildingEvent $event): void
     {
         $event->builder()->addDefinitions([
             MediaArchiveAdminController::class => \DI\autowire()
-                ->constructorParameter('derivatives', \DI\get(\Spora\Services\MediaArchive\MediaDerivativeService::class)),
+                ->constructorParameter('derivatives', \DI\get(\Spora\Services\MediaArchive\MediaDerivativeService::class))
+                ->constructorParameter('activeTypes', \DI\get(\Spora\Services\MediaArchive\MediaActiveTypesPolicy::class)),
         ]);
     }
 

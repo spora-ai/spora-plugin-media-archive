@@ -15,7 +15,6 @@ use Spora\Services\DatabaseAssetStore;
 use Spora\Services\LocalAssetStore;
 use Spora\Services\MediaArchive\DerivativeOutput;
 use Spora\Services\MediaArchive\MediaArchiveService;
-use Spora\Services\MediaArchive\MediaAssetSerializer;
 use Spora\Services\MediaArchive\MediaDerivativeService;
 use Spora\Services\MediaArchive\MediaIngestRequest;
 use Symfony\Component\HttpFoundation\Request;
@@ -475,6 +474,54 @@ test('PATCH does not validate a stale markdown_content key', function (): void {
 /**
  * @return array{0: MediaArchiveService, 1: MediaArchiveService, 2: MediaArchiveAdminController}
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// show() — GET /api/v1/media/{id}
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The detail response carries the embed descriptor for a script-capable
+ * asset the operator has permitted.
+ *
+ * Without the policy in the serializer the field is always null, and the
+ * detail page's live preview never renders — while the same asset's tool
+ * result *does* carry a descriptor.
+ */
+test('GET /api/v1/media/{id} describes the embed for a permitted script-capable asset', function (): void {
+    [$service, $controller] = buildShowController(activeTypes: true);
+    $asset = $service->ingest(new MediaIngestRequest(
+        bytes: '<!DOCTYPE html><html><body><h1>hi</h1></body></html>',
+        mime: 'text/html',
+        filename: 'page.html',
+        userId: 1,
+        uploadSource: 'upload',
+    ));
+
+    $resp = $controller->show($asset->id);
+    $body = json_decode($resp->getContent(), true);
+
+    expect($body['data']['embed_descriptor'])->toBeArray();
+    expect($body['data']['embed_descriptor']['url'])->toContain('/embed');
+    expect($body['data']['embed_descriptor']['mime'])->toBe('text/html');
+    // The embed-script toggle is separate, and off here.
+    expect($body['data']['embed_descriptor']['scripts'])->toBeFalse();
+});
+
+test('GET /api/v1/media/{id} describes no embed while the operator has not permitted the format', function (): void {
+    [$service, $controller] = buildShowController(activeTypes: false);
+    $asset = $service->ingest(new MediaIngestRequest(
+        bytes: '<!DOCTYPE html><html><body><h1>hi</h1></body></html>',
+        mime: 'text/html',
+        filename: 'page.html',
+        userId: 1,
+        uploadSource: 'upload',
+    ));
+
+    $resp = $controller->show($asset->id);
+    $body = json_decode($resp->getContent(), true);
+
+    expect($body['data']['embed_descriptor'])->toBeNull();
+});
+
 function buildUpdateController(bool $isAdmin = true, int $userId = 1): array
 {
     $tmp = sys_get_temp_dir() . '/spora-update-' . bin2hex(random_bytes(4));
@@ -552,7 +599,6 @@ function buildSharingController(bool $isAdmin = true, int $userId = 1): array
             stubAuth($userId, $isAdmin),
             new \Spora\Services\MediaArchive\MediaFolderService(),
             null,
-            new MediaAssetSerializer(),
             ['app_url' => 'https://test.example/'],
         ),
     ];
@@ -581,4 +627,41 @@ function stubAuth(int $userId, bool $isAdmin): AuthService
     $auth->shouldReceive('isAdmin')->andReturn($isAdmin);
 
     return $auth;
+}
+
+/**
+ * @return array{0: MediaArchiveService, 1: MediaArchiveAdminController}
+ */
+function buildShowController(bool $activeTypes): array
+{
+    $tmp = sys_get_temp_dir() . '/spora-show-' . bin2hex(random_bytes(4));
+    mkdir($tmp, 0755, recursive: true);
+    putenv("SPORA_STORAGE_DIR={$tmp}");
+    $_ENV['SPORA_STORAGE_DIR']    = $tmp;
+    $_SERVER['SPORA_STORAGE_DIR'] = $tmp;
+    $paths    = new Paths(BASE_PATH);
+    $security = new SecurityManager(str_repeat("\0", SODIUM_CRYPTO_SECRETBOX_KEYBYTES));
+    $database = new DatabaseAssetStore(50 * 1024 * 1024);
+    $local    = new LocalAssetStore($paths, $security, 50 * 1024 * 1024);
+    $assetStore = new AutoAssetStore($database, $local, 1_048_576);
+    $service = MediaArchiveTestSupport::buildService($assetStore);
+
+    $policy = new \Spora\Services\MediaArchive\MediaActiveTypesPolicy(new \Spora\Core\Config(
+        ['SPORA_MEDIA_ARCHIVE_ALLOW_ACTIVE_TYPES' => $activeTypes],
+        ['SPORA_MEDIA_ARCHIVE_ALLOW_ACTIVE_TYPES' => \Spora\Core\Config::SOURCE_ENV],
+    ));
+
+    // Built the way the container builds it: the policy is injected and
+    // the controller derives its serializer, so the test covers the wiring
+    // rather than a hand-assembled serializer.
+    $controller = new MediaArchiveAdminController(
+        $service,
+        stubAuth(1, true),
+        new \Spora\Services\MediaArchive\MediaFolderService(),
+        null,
+        [],
+        $policy,
+    );
+
+    return [$service, $controller];
 }
