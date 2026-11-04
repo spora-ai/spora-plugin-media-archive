@@ -10,6 +10,7 @@ use Spora\Http\JsonControllerHelpers;
 use Spora\Models\MediaAsset;
 use Spora\Services\MediaArchive\Exceptions\MediaFolderNotFoundException;
 use Spora\Services\MediaArchive\Exceptions\MediaFolderUniquenessException;
+use Spora\Services\MediaArchive\MediaActiveTypesPolicy;
 use Spora\Services\MediaArchive\MediaArchiveService;
 use Spora\Services\MediaArchive\MediaAssetSerializer;
 use Spora\Services\MediaArchive\MediaDerivativeService;
@@ -58,8 +59,12 @@ final class MediaArchiveAdminController
         // container definition force-injects it — so the nullable default
         // only applies to tests.
         private readonly ?MediaDerivativeService $derivatives = null,
-        private readonly MediaAssetSerializer $defaultSerializer = new MediaAssetSerializer(),
         private readonly array $config = [],
+        // The operator's decision about the script-capable formats. The
+        // serializer needs it to decide whether an asset carries an embed
+        // descriptor, and without it the detail page's embed would never
+        // render while the same asset's tool result did.
+        private readonly ?MediaActiveTypesPolicy $activeTypes = null,
     ) {}
 
     public function show(string $id): JsonResponse
@@ -119,12 +124,17 @@ final class MediaArchiveAdminController
      * sees `derivatives: []` on reload — `onDerivativeProduced()` only
      * covers the in-memory splice, a hard refresh re-fetches
      * `GET /api/v1/media/{id}`.
+     *
+     * The policy travels with it either way: an asset's `embed_descriptor`
+     * must not depend on whether the derivative service happened to be
+     * wired, or the same asset would describe an embed on one surface and
+     * not on another.
      */
     private function serializer(): MediaAssetSerializer
     {
         return $this->derivatives !== null
-            ? new MediaAssetSerializer(true, $this->derivatives)
-            : $this->defaultSerializer;
+            ? new MediaAssetSerializer(true, $this->derivatives, $this->activeTypes)
+            : new MediaAssetSerializer(true, null, $this->activeTypes);
     }
 
     private function findEditableAsset(string $id): MediaAsset|JsonResponse
