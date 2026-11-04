@@ -15,7 +15,6 @@ use Spora\Services\DatabaseAssetStore;
 use Spora\Services\LocalAssetStore;
 use Spora\Services\MediaArchive\DerivativeOutput;
 use Spora\Services\MediaArchive\MediaArchiveService;
-use Spora\Services\MediaArchive\MediaAssetSerializer;
 use Spora\Services\MediaArchive\MediaDerivativeService;
 use Spora\Services\MediaArchive\MediaIngestRequest;
 use Symfony\Component\HttpFoundation\Request;
