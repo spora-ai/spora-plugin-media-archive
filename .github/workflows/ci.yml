@@ -14,20 +14,18 @@ name: CI
 # constraint against the sources it names — rather than replaying a lock — is
 # what makes a green run mean the constraint is satisfiable.
 #
-# The floor is core 0.33.0, the release that carries core's folders and the
-# script-capable-media API this plugin's embed descriptor reads. It is not on
-# Packagist yet, so the constraint also names core's `main`, which carries that
-# API once the core PR merges: the update resolves a core that has it.
+# The floor release will carry core's folders and the script-capable-media
+# policy behind `embed_descriptor`, but it is not on Packagist yet — so the
+# constraint also names core's `main`, which has both already.
 #
-# `main` rather than a feature branch on purpose. A feature branch has to be
-# deleted by hand, and deleting it while a plugin still names it breaks that
-# plugin's CI — which is what happened here when `dev-feat/media-folders` was
-# deleted after its merge. `main` is never deleted, so the constraint cannot
+# `main`, not a feature branch: a feature branch can be deleted by hand, and a
+# plugin still naming a deleted one cannot resolve — as `dev-feat/media-folders`
+# did here, after its merge. `main` is never deleted, so the constraint cannot
 # dangle.
 #
-# An operator still needs the release — their `minimum-stability` refuses a dev
-# version — and once 0.33.0 is published, `prefer-stable` picks it over the
-# branch.
+# The `|| dev-main` alternative serves only this repository's own installs: an
+# operator's project defaults to `minimum-stability: stable`, which refuses a
+# transitive dev version, so they still need the release.
 
 on:
   push:
