@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1b0527c7389a86237576942c5b01b13e",
+    "content-hash": "956697cbae2dd2439361ef5afca8dcca",
     "packages": [
         {
             "name": "brick/math",
@@ -3063,16 +3063,16 @@
         },
         {
             "name": "spora-ai/spora-core",
-            "version": "dev-feat/media-folders",
+            "version": "dev-main",
             "source": {
                 "type": "git",
-                "url": "git@github.com:spora-ai/spora-core.git",
-                "reference": "ec7204fe88b15560b38a25ae027cd788936ea3f5"
+                "url": "https://github.com/spora-ai/spora-core.git",
+                "reference": "bbbdb947f726bee9b5dd79f355c748c2d8a46610"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/spora-ai/spora-core/zipball/ec7204fe88b15560b38a25ae027cd788936ea3f5",
-                "reference": "ec7204fe88b15560b38a25ae027cd788936ea3f5",
+                "url": "https://api.github.com/repos/spora-ai/spora-core/zipball/bbbdb947f726bee9b5dd79f355c748c2d8a46610",
+                "reference": "bbbdb947f726bee9b5dd79f355c748c2d8a46610",
                 "shasum": ""
             },
             "require": {
@@ -3123,6 +3123,7 @@
                 "phpstan/phpstan-mockery": "^2.0",
                 "zircote/swagger-php": "^6.4"
             },
+            "default-branch": true,
             "bin": [
                 "bin/spora",
                 "bin/spora-build"
@@ -3213,7 +3214,11 @@
                 "MIT"
             ],
             "description": "A portable, zero-configuration AI agent orchestration platform that runs on any shared host (cPanel/FTP) without system dependencies beyond PHP 8.4+.",
-            "time": "2026-11-02T08:49:47+00:00"
+            "support": {
+                "source": "https://github.com/spora-ai/spora-core/tree/main",
+                "issues": "https://github.com/spora-ai/spora-core/issues"
+            },
+            "time": "2026-11-04T22:10:32+00:00"
         },
         {
             "name": "spora-ai/spora-plugin-media-archive-frontend",
