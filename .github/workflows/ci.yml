@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.4', '8.5']
+        php: ['8.4', '8.5', '8.6']
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -128,7 +128,7 @@ jobs:
         run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run Pest with coverage
-        # Pest 4 emits a WARN ("No filter is configured, code coverage will
+        # PHPUnit emits a WARN ("No filter is configured, code coverage will
         # not be processed") and exits 1 if you don't pass a coverage
         # filter. `--coverage-filter=src` scopes pcov to the plugin's
         # production code; `tests/` is excluded by default.
