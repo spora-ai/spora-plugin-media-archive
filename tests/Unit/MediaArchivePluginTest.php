@@ -11,6 +11,7 @@ use Spora\Events\RoutesRegisteringEvent;
 use Spora\Http\Middleware\AuthMiddleware;
 use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\MediaArchive\Http\MediaArchiveAdminController;
+use Spora\Plugins\MediaArchive\Http\MediaChatReferenceController;
 use Spora\Plugins\MediaArchive\MediaArchiveApp;
 use Spora\Plugins\MediaArchive\MediaArchivePlugin;
 use Spora\Plugins\MediaArchive\MediaAssetSearchProvider;
@@ -123,7 +124,7 @@ it('wires MediaArchiveAdminController into the PHP-DI container on ContainerBuil
     expect($container->has(MediaArchiveAdminController::class))->toBeTrue();
 });
 
-it('registers the four admin routes on RoutesRegisteringEvent', function (): void {
+it('registers the admin routes and the chat-reference count on RoutesRegisteringEvent', function (): void {
     // Belt-and-braces against a route accidentally regressing to its old
     // spora-core home (the list endpoint stays in core; these four move
     // here so the plugin owns its CRUD end-to-end).
@@ -145,6 +146,7 @@ it('registers the four admin routes on RoutesRegisteringEvent', function (): voi
         'update',
         'destroy',
         'refreshPublicToken',
+        'chatReferences',
     ]);
 
     // Every plugin-owned route is gated behind Auth + CSRF — a future
@@ -156,19 +158,26 @@ it('registers the four admin routes on RoutesRegisteringEvent', function (): voi
         expect($record['middleware'])->toContain(CsrfMiddleware::class);
     }
 
-    // The handler dispatched by every record should be a method on
-    // MediaArchiveAdminController — otherwise the route would dispatch
+    // The handler dispatched by every record should be a method on a
+    // controller this plugin owns — otherwise the route would dispatch
     // into the wrong class and 404 at runtime.
     foreach ($records as $record) {
-        expect($record['controller'])->toBe(MediaArchiveAdminController::class);
+        expect([
+            MediaArchiveAdminController::class,
+            MediaChatReferenceController::class,
+        ])->toContain($record['controller']);
     }
 });
 
 /**
- * Walk FastRoute's compiled regex/routeMap structure for a
- * {@see MiddlewareRouteCollector} and yield each registered route's
- * method, regex, handler, and middleware list. Used to introspect what
- * the listener under test added without booting a Router.
+ * Walk FastRoute's compiled structure for a {@see MiddlewareRouteCollector}
+ * and yield each registered route's method, path, handler, and middleware
+ * list. Used to introspect what the listener under test added without
+ * booting a Router.
+ *
+ * Both halves of the compiled data are walked: a route with a variable
+ * segment lands in the regex chunks, a route without one lands in the
+ * static map.
  *
  * @return list<array{method: string, regex: string, controller: class-string, action: string, middleware: list<string>}>
  */
@@ -176,9 +185,25 @@ function collectRegisteredRoutes(MiddlewareRouteCollector $routes): array
 {
     /** @var array{0: array<string, mixed>, 1: array<string, mixed>} $data */
     $data = $routes->getData();
-    [, $variableRoutes] = $data;
+    [$staticRoutes, $variableRoutes] = $data;
 
     $records = [];
+    foreach ($staticRoutes as $method => $routesByPath) {
+        foreach ($routesByPath as $path => $entry) {
+            /** @var array{handler: array{0: class-string, 1: string}, middleware: list<class-string>} $entry */
+            [$controller, $action] = $entry['handler'];
+            /** @var list<class-string> $middleware */
+            $middleware = $entry['middleware'];
+            $records[] = [
+                'method'     => (string) $method,
+                'regex'      => (string) $path,
+                'controller' => $controller,
+                'action'     => $action,
+                'middleware' => $middleware,
+            ];
+        }
+    }
+
     foreach ($variableRoutes as $method => $chunks) {
         foreach ($chunks as $chunk) {
             $regex = $chunk['regex'];
