@@ -47,7 +47,14 @@ final class MediaChatReferenceController
      */
     private const MAX_IDS_PER_REQUEST = 64;
 
-    private const UUID_REGEX = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+    /**
+     * A UUID, anchored at both ends.
+     *
+     * The end anchor is `\z` and not `$`: PCRE's `$` also matches
+     * before a trailing newline, so `"…666\n"` would pass as a UUID
+     * string and reach the counter as an id that names nothing.
+     */
+    private const UUID_REGEX = '/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i';
 
     public function __construct(
         private readonly MediaChatReferenceCounter $counter,

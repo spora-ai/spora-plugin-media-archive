@@ -130,6 +130,19 @@ it('rejects a malformed id with 422', function (): void {
     expect($body['error']['code'])->toBe('VALIDATION_ERROR');
 });
 
+it('rejects a uuid with a trailing newline with 422', function (): void {
+    // PCRE's `$` also matches before a trailing newline, so the id would
+    // pass the shape check and reach the counter as an id that names
+    // nothing.
+    $controller = buildController();
+
+    $response = $controller->chatReferences(jsonRequest([ENDPOINT_ASSET . "\n"]));
+
+    expect($response->getStatusCode())->toBe(422);
+    $body = json_decode((string) $response->getContent(), true);
+    expect($body['error']['code'])->toBe('VALIDATION_ERROR');
+});
+
 it('rejects an empty id list with 422', function (): void {
     $controller = buildController();
 
