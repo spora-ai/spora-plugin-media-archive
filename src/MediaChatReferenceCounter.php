@@ -7,6 +7,7 @@ namespace Spora\Plugins\MediaArchive;
 use Illuminate\Database\Eloquent\Builder;
 use JsonException;
 use Spora\Models\TaskHistory;
+use stdClass;
 
 /**
  * Counts the chats that reference a media asset.
@@ -148,6 +149,13 @@ final class MediaChatReferenceCounter
      * treats a failed decode. SQLite stores the column as unvalidated
      * TEXT, so such a row can exist.
      *
+     * The root must be a JSON array: core writes a list of
+     * `{media_id, kind}` objects (core migration 0057), and a row whose
+     * root is an object holds named fields, not attachments — its
+     * members are not references. Decoding without the associative flag
+     * keeps the two apart, because an object root then arrives as an
+     * object and an array root as a list.
+     *
      * @return list<string>
      */
     private function mediaIds(mixed $raw): array
@@ -157,7 +165,7 @@ final class MediaChatReferenceCounter
         }
 
         try {
-            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            $decoded = json_decode($raw, false, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
             // A row holding something that is not JSON at all reads as "no
             // references" — the same answer as a row with no attachments.
@@ -170,10 +178,10 @@ final class MediaChatReferenceCounter
 
         $ids = [];
         foreach ($decoded as $attachment) {
-            if (!is_array($attachment)) {
+            if (!$attachment instanceof stdClass) {
                 continue;
             }
-            $mediaId = $attachment['media_id'] ?? null;
+            $mediaId = $attachment->media_id ?? null;
             if (is_string($mediaId)) {
                 $ids[] = $mediaId;
             }

@@ -103,3 +103,16 @@ it('ignores a row whose attachments are not JSON', function (): void {
 
     expect($counter->countFor([CHAT_REF_ASSET]))->toBe([CHAT_REF_ASSET => 1]);
 });
+
+it('ignores a row whose attachments are a JSON object', function (): void {
+    // Core writes a list of attachment objects. A row whose root is an
+    // object holds named fields, not attachments — its members are not
+    // references, and the uuid in one of them names nothing.
+    ChatFixture::chatWithRawAttachments(json_encode([
+        'item' => ['media_id' => CHAT_REF_ASSET, 'kind' => 'image'],
+    ], JSON_THROW_ON_ERROR));
+
+    $counter = new MediaChatReferenceCounter();
+
+    expect($counter->countFor([CHAT_REF_ASSET]))->toBe([CHAT_REF_ASSET => 0]);
+});
