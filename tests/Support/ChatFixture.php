@@ -26,11 +26,15 @@ final class ChatFixture
      * The row is written directly rather than ingested: the ingest
      * pipeline writes the bytes and the derivatives, and a count does not
      * care about either.
+     *
+     * @param int|null $ownerId The user the asset belongs to; `null`
+     *                           leaves the row unowned.
      */
-    public static function asset(string $id): string
+    public static function asset(string $id, ?int $ownerId = null): string
     {
         Capsule::connection()->table('media_assets')->insert([
             'id' => $id,
+            'user_id' => $ownerId,
             'asset_url' => '/api/v1/assets/' . $id,
             'storage_mode' => 'data_url',
             'media_type' => 'image',
@@ -49,17 +53,7 @@ final class ChatFixture
     public static function chatWithAttachments(array $mediaIds): int
     {
         $db = Capsule::connection();
-        $userId = self::user($db);
-        $principalId = self::principal($db, $userId);
-        $agentId = self::agent($db, $principalId);
-
-        $taskId = (int) $db->table('tasks')->insertGetId([
-            'agent_id' => $agentId,
-            'principal_id' => $principalId,
-            'trigger_user_id' => $userId,
-            'status' => 'COMPLETED',
-            'user_prompt' => 'a fixture chat',
-        ]);
+        $taskId = self::chat($db);
 
         foreach ($mediaIds as $index => $mediaId) {
             $db->table('task_history')->insert([
@@ -74,6 +68,43 @@ final class ChatFixture
         }
 
         return $taskId;
+    }
+
+    /**
+     * A chat whose one history row carries the given column value
+     * verbatim.
+     *
+     * The column is unvalidated TEXT on SQLite, so a row can hold
+     * something that is not JSON at all.
+     */
+    public static function chatWithRawAttachments(string $attachments): int
+    {
+        $db = Capsule::connection();
+        $taskId = self::chat($db);
+
+        $db->table('task_history')->insert([
+            'task_id' => $taskId,
+            'sequence' => 1,
+            'role' => 'user',
+            'attachments' => $attachments,
+        ]);
+
+        return $taskId;
+    }
+
+    private static function chat(Connection $db): int
+    {
+        $userId = self::user($db);
+        $principalId = self::principal($db, $userId);
+        $agentId = self::agent($db, $principalId);
+
+        return (int) $db->table('tasks')->insertGetId([
+            'agent_id' => $agentId,
+            'principal_id' => $principalId,
+            'trigger_user_id' => $userId,
+            'status' => 'COMPLETED',
+            'user_prompt' => 'a fixture chat',
+        ]);
     }
 
     private static function user(Connection $db): int

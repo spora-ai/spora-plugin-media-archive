@@ -24,6 +24,7 @@ use Symfony\Component\HttpFoundation\Request;
 
 const ENDPOINT_ASSET = '33333333-3333-4333-8333-333333333333';
 const ENDPOINT_OTHER_ASSET = '44444444-4444-4444-8444-444444444444';
+const ENDPOINT_LETTERED_ASSET = 'aabbccdd-1111-4222-8333-444455556666';
 
 it('counts the chats that reference an asset', function (): void {
     $controller = buildController();
@@ -74,6 +75,49 @@ it('reports zero for an id that names no asset', function (): void {
     expect($response->getStatusCode())->toBe(200);
     $body = json_decode((string) $response->getContent(), true);
     expect($body['data']['counts'])->toBe(['55555555-5555-4555-8555-555555555555' => 0]);
+});
+
+it('reports zero for an asset the caller cannot see', function (): void {
+    // Existence-hiding reaches further than a missing row: the asset
+    // exists and belongs to somebody else.
+    $controller = buildController(isAdmin: false);
+    ChatFixture::asset(ENDPOINT_OTHER_ASSET, ownerId: 999);
+    ChatFixture::chatWithAttachments([ENDPOINT_OTHER_ASSET]);
+
+    $response = $controller->chatReferences(jsonRequest([ENDPOINT_OTHER_ASSET]));
+
+    expect($response->getStatusCode())->toBe(200);
+    $body = json_decode((string) $response->getContent(), true);
+    expect($body['data']['counts'])->toBe([ENDPOINT_OTHER_ASSET => 0]);
+});
+
+it('answers under the id the caller asked for', function (): void {
+    $controller = buildController();
+    ChatFixture::asset(ENDPOINT_LETTERED_ASSET);
+    ChatFixture::chatWithAttachments([ENDPOINT_LETTERED_ASSET]);
+
+    $response = $controller->chatReferences(jsonRequest([strtoupper(ENDPOINT_LETTERED_ASSET)]));
+
+    expect($response->getStatusCode())->toBe(200);
+    $body = json_decode((string) $response->getContent(), true);
+    expect($body['data']['counts'])->toBe([strtoupper(ENDPOINT_LETTERED_ASSET) => 1]);
+});
+
+it('answers both spellings of one id with the same count', function (): void {
+    $controller = buildController();
+    ChatFixture::asset(ENDPOINT_LETTERED_ASSET);
+    ChatFixture::chatWithAttachments([ENDPOINT_LETTERED_ASSET]);
+
+    $response = $controller->chatReferences(jsonRequest([
+        strtoupper(ENDPOINT_LETTERED_ASSET),
+        ENDPOINT_LETTERED_ASSET,
+    ]));
+
+    $body = json_decode((string) $response->getContent(), true);
+    expect($body['data']['counts'])->toBe([
+        strtoupper(ENDPOINT_LETTERED_ASSET) => 1,
+        ENDPOINT_LETTERED_ASSET => 1,
+    ]);
 });
 
 it('rejects a malformed id with 422', function (): void {

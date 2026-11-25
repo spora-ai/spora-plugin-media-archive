@@ -32,6 +32,9 @@ use Symfony\Component\HttpFoundation\Response;
  * the way core's resolve endpoint hides a foreign id: the panel asks
  * about the assets it is about to delete, and a count it may not have is
  * a count it does not get.
+ *
+ * The answer carries exactly one key per requested id, spelled the way
+ * the caller spelled it.
  */
 final class MediaChatReferenceController
 {
@@ -77,21 +80,42 @@ final class MediaChatReferenceController
     }
 
     /**
-     * The requested ids the caller can see.
+     * The requested ids the caller can see, in the spelling the caller
+     * used.
+     *
+     * The id the row carries and the id the caller asked for can differ
+     * in case — `media_assets.id` is a `char(36)` under a
+     * case-insensitive collation on MySQL — and the count is the same
+     * either way, so the lookup folds case and the answer is keyed by
+     * the requested id. Keying it by the stored id would answer one
+     * request under two keys, one of them reading `0` beside the real
+     * count.
      *
      * @param  list<string> $ids
      * @return list<string>
      */
     private function visibleIds(array $ids, int $userId): array
     {
-        $assets = $this->mediaArchive->resolveMany($ids, $userId, $this->auth->isAdmin());
+        $folded = [];
+        foreach ($ids as $id) {
+            $folded[mb_strtolower($id)] = true;
+        }
+
+        $assets = $this->mediaArchive->resolveMany(array_keys($folded), $userId, $this->auth->isAdmin());
 
         $visible = [];
         foreach ($assets as $asset) {
-            $visible[] = $asset->id;
+            $visible[mb_strtolower($asset->id)] = true;
         }
 
-        return $visible;
+        $result = [];
+        foreach ($ids as $id) {
+            if (isset($visible[mb_strtolower($id)])) {
+                $result[] = $id;
+            }
+        }
+
+        return $result;
     }
 
     /**
