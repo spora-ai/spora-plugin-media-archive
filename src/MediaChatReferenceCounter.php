@@ -159,7 +159,9 @@ final class MediaChatReferenceCounter
         try {
             $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
-            return [];
+            // A row holding something that is not JSON at all reads as "no
+            // references" — the same answer as a row with no attachments.
+            $decoded = null;
         }
 
         if (!is_array($decoded)) {
