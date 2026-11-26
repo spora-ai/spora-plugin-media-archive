@@ -11,6 +11,7 @@ use Spora\Http\Middleware\AuthMiddleware;
 use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
 use Spora\Plugins\MediaArchive\Http\MediaArchiveAdminController;
+use Spora\Plugins\MediaArchive\Http\MediaChatReferenceController;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
@@ -39,6 +40,13 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriberInterface
 {
     private const ROUTE_MEDIA_ITEM = '/api/v1/media/{id}';
+
+    /**
+     * The chat-reference count. A static segment, so it cannot be
+     * swallowed by the `{id}` route above — the two differ in their
+     * method and their segment count anyway.
+     */
+    private const ROUTE_CHAT_REFERENCES = '/api/v1/media/chat-references';
 
     private const AUTH = [AuthMiddleware::class, CsrfMiddleware::class];
 
@@ -89,6 +97,7 @@ final class MediaArchivePlugin extends AbstractPlugin implements EventSubscriber
         $event->routes()->addRoute('PATCH', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'update'], self::AUTH);
         $event->routes()->addRoute('DELETE', self::ROUTE_MEDIA_ITEM, [MediaArchiveAdminController::class, 'destroy'], self::AUTH);
         $event->routes()->addRoute('POST', self::ROUTE_MEDIA_ITEM . '/public-token/refresh', [MediaArchiveAdminController::class, 'refreshPublicToken'], self::AUTH);
+        $event->routes()->addRoute('POST', self::ROUTE_CHAT_REFERENCES, [MediaChatReferenceController::class, 'chatReferences'], self::AUTH);
     }
 
     /**
